@@ -1,4 +1,4 @@
-// BooPHF library
+﻿// BooPHF library
 // intended to be a minimal perfect hash function with fast and low memory construction, at the cost of (slightly) higher bits/elem than other state of the art libraries once built.
 // should work with arbitray large number of elements, based on a cascade of  "collision-free" bit arrays
 
@@ -13,30 +13,41 @@
 #include <unordered_map>
 #include <vector>
 #include <assert.h>
-#include <sys/time.h>
+// #include <sys/time.h>
 #include <string.h>
 #include <memory> // for make_shared
-#include <unistd.h>
+// #include <unistd.h>
 #include <inttypes.h>
+
+#include "platform_time.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 
 
 namespace boomphf {
 
 	
-	inline uint64_t printPt( pthread_t pt) {
-	  unsigned char *ptc = (unsigned char*)(void*)(&pt);
-		uint64_t res =0;
-	  for (size_t i=0; i<sizeof(pt); i++) {
-		  res+= (unsigned)(ptc[i]);
-	  }
+	inline uint64_t printPt(thread_t pt) {
+	#ifdef _WIN32
+		// Windows 版本：HANDLE 通常是指针或句柄，转换为数值即可
+		return (uint64_t)(uintptr_t)pt;
+	#else
+		unsigned char *ptc = (unsigned char*)(void*)(&pt);
+		uint64_t res = 0;
+		for (size_t i = 0; i < sizeof(pt); i++) {
+		res += (unsigned)(ptc[i]);
+		}
 		return res;
+	#endif
 	}
+
 	
 	
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark utils
+// #pragma mark -
+// #pragma mark utils
 ////////////////////////////////////////////////////////////////
 
 	
@@ -347,8 +358,8 @@ namespace boomphf {
 
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark hasher
+// #pragma mark -
+// #pragma mark hasher
 ////////////////////////////////////////////////////////////////
 
 	typedef std::array<uint64_t,10> hash_set_t;
@@ -524,8 +535,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark iterators
+// #pragma mark -
+// #pragma mark iterators
 ////////////////////////////////////////////////////////////////
 
 	template <typename Iterator>
@@ -552,8 +563,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 	}
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark BitVector
+// #pragma mark -
+// #pragma mark BitVector
 ////////////////////////////////////////////////////////////////
 
 	class bitVector {
@@ -703,12 +714,26 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		}
 
 		//atomically   return old val and set to 1
-		uint64_t atomic_test_and_set(uint64_t pos)
-		{
-			uint64_t oldval = 	__sync_fetch_and_or (_bitArray + (pos >> 6), (uint64_t) (1ULL << (pos & 63)) );
+		// uint64_t atomic_test_and_set(uint64_t pos)
+		// {
+		// 	uint64_t oldval = 	__sync_fetch_and_or (_bitArray + (pos >> 6), (uint64_t) (1ULL << (pos & 63)) );
 
-			return  ( oldval >> (pos & 63 ) ) & 1;
+		// 	return  ( oldval >> (pos & 63 ) ) & 1;
+		// }
+		inline uint64_t atomic_test_and_set(uint64_t pos)
+		{
+			uint64_t mask = (1ULL << (pos & 63));
+			uint64_t* target = _bitArray + (pos >> 6);
+
+			// InterlockedOr64 返回的是新值，模拟原来 fetch-and-or 的返回旧值行为
+			uint64_t oldval;
+			do {
+				oldval = *target;
+			} while (InterlockedCompareExchange64((volatile LONG64*)target, oldval | mask, oldval) != oldval);
+
+			return (oldval >> (pos & 63)) & 1;
 		}
+
 
 
 		uint64_t get(uint64_t pos) const
@@ -726,14 +751,22 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		{
 			assert(pos<_size);
 			//_bitArray [pos >> 6] |=   (1ULL << (pos & 63) ) ;
-			__sync_fetch_and_or (_bitArray + (pos >> 6ULL), (1ULL << (pos & 63)) );
+    		#ifdef _WIN32
+    		InterlockedOr64((volatile LONG64*)(_bitArray + (pos >> 6ULL)), (1ULL << (pos & 63)));
+    		#else
+    		__sync_fetch_and_or(_bitArray + (pos >> 6ULL), (1ULL << (pos & 63)));
+    		#endif
 		}
 
 		//set bit pos to 0
 		void reset(uint64_t pos)
 		{
 			//_bitArray [pos >> 6] &=   ~(1ULL << (pos & 63) ) ;
-			__sync_fetch_and_and (_bitArray + (pos >> 6ULL), ~(1ULL << (pos & 63) ));
+			#ifdef _WIN32
+			InterlockedAnd64((volatile LONG64*)(_bitArray + (pos >> 6ULL)), ~(1ULL << (pos & 63)));
+			#else
+			__sync_fetch_and_and(_bitArray + (pos >> 6ULL), ~(1ULL << (pos & 63)));
+			#endif
 		}
 
 		//return value of  last rank
@@ -807,16 +840,19 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 	};
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark level
+// #pragma mark -
+// #pragma mark level
 ////////////////////////////////////////////////////////////////
 
 	
 	static inline uint64_t fastrange64(uint64_t word, uint64_t p) {
 		//return word %  p;
-
+	#ifdef _MSC_VER
+		// MSVC 无 __uint128_t，退回普通取模
+		return word % p;
+	#else
 		return (uint64_t)(((__uint128_t)word * (__uint128_t)p) >> 64);
-
+	#endif
 	}
 	
 	class level{
@@ -841,8 +877,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark mphf
+// #pragma mark -
+// #pragma mark mphf
 ////////////////////////////////////////////////////////////////
 
 
@@ -1036,7 +1072,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
         void pthread_processLevel( std::vector<elem_t>  & buffer , std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
 		{
 			uint64_t nb_done =0;
-			int tid =  __sync_fetch_and_add (&_nb_living, 1);
+			#ifdef _WIN32
+			int tid = InterlockedIncrement(&_nb_living) - 1;
+			#else
+			int tid = __sync_fetch_and_add(&_nb_living, 1);
+			#endif
 			auto until = *until_p;
 			uint64_t inbuff =0;
 
@@ -1048,7 +1088,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			{
 
 				//safely copy n items into buffer
+				#ifdef _WIN32
+				EnterCriticalSection(&_mutex);
+				#else
 				pthread_mutex_lock(&_mutex);
+				#endif
                 for(; inbuff<NBBUFF && (*shared_it)!=until;  ++(*shared_it))
 				{
                     buffer[inbuff]= *(*shared_it); inbuff++;
@@ -1089,7 +1133,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 						if(_fastmode && i == _fastModeLevel)
 						{
 
-							uint64_t idxl2 = __sync_fetch_and_add(& _idxLevelsetLevelFastmode,1);
+							#ifdef _WIN32
+							uint64_t idxl2 = InterlockedIncrement64(&_idxLevelsetLevelFastmode) - 1;
+							#else
+							uint64_t idxl2 = __sync_fetch_and_add(&_idxLevelsetLevelFastmode,1);
+							#endif
 							//si depasse taille attendue pour setLevelFastmode, fall back sur slow mode mais devrait pas arriver si hash ok et proba avec nous
 							if(idxl2>= setLevelFastmode.size())
 								_fastmode = false;
@@ -1101,9 +1149,17 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 						if(i == _nb_levels-1) //stop cascade here, insert into exact hash
 						{
 
-							uint64_t hashidx =  __sync_fetch_and_add (& _hashidx, 1);
+							#ifdef _WIN32
+							uint64_t hashidx = InterlockedIncrement64(&_hashidx) - 1;
+							#else
+							uint64_t hashidx = __sync_fetch_and_add(&_hashidx, 1);
+							#endif
 
+							#ifdef _WIN32
+							EnterCriticalSection(&_mutex); //see later if possible to avoid this, mais pas bcp item vont la
+							#else
 							pthread_mutex_lock(&_mutex); //see later if possible to avoid this, mais pas bcp item vont la
+							#endif
 							// calc rank de fin  precedent level qq part, puis init hashidx avec ce rank, direct minimal, pas besoin inser ds bitset et rank
 							_final_hash[val] = hashidx;
 							pthread_mutex_unlock(&_mutex);
@@ -1119,9 +1175,23 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 								if(writebuff>=NBBUFF)
 								{
 									//flush buffer
+									#ifdef _WIN32
+									// Windows不支持flockfile，使用文件独占锁
+									OVERLAPPED ol = {0};
+									HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
+									LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
+									#else
 									flockfile(_currlevelFile);
+									#endif
 									fwrite(myWriteBuff.data(),sizeof(elem_t),writebuff,_currlevelFile);
+									#ifdef _WIN32
+									// 解锁文件
+									OVERLAPPED ol = {0};
+									HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
+									UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
+									#else
 									funlockfile(_currlevelFile);
+									#endif
 									writebuff = 0;
 								
 								}
@@ -1254,9 +1324,17 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 		void setup()
 		{
+			#ifdef _WIN32
+			InitializeCriticalSection(&_mutex);
+			#else
 			pthread_mutex_init(&_mutex, NULL);
+			#endif
 
-			_pid = getpid() + printPt(pthread_self()) ;// + pthread_self();
+			#ifdef _WIN32
+			_pid = GetCurrentProcessId() + printPt(GetCurrentThreadId());
+			#else
+			_pid = getpid() + printPt(pthread_self());
+			#endif
 			//printf("pt self %llu  pid %i \n",printPt(pthread_self()),_pid);
 
 			_cptTotalProcessed=0;
@@ -1378,10 +1456,20 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			sprintf(fname_old,"temp_p%i_level_%i",_pid,i-2);
 			
 			char fname_curr[1000];
+			#ifdef _WIN32
+			// 确保Windows路径格式正确
+			sprintf(fname_curr,"temp_p%i_level_%i.tmp",_pid,i);
+			#else
 			sprintf(fname_curr,"temp_p%i_level_%i",_pid,i);
+			#endif
 			
 			char fname_prev[1000];
+			#ifdef _WIN32
+			// 确保Windows路径格式正确
+			sprintf(fname_prev,"temp_p%i_level_%i.tmp",_pid,i-1);
+			#else
 			sprintf(fname_prev,"temp_p%i_level_%i",_pid,i-1);
+			#endif
 			
 			if(_writeEachLevel)
 			{
@@ -1404,7 +1492,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			_idxLevelsetLevelFastmode =0;
 			_nb_living =0;
 			//create  threads
-			pthread_t *tab_threads= new pthread_t [_num_thread];
+			#ifdef _WIN32
+			HANDLE *tab_threads = new HANDLE[_num_thread];
+			#else
+			pthread_t *tab_threads = new pthread_t[_num_thread];
+			#endif
 			typedef decltype(input_range.begin()) it_type;
 			thread_args<Range, it_type> t_arg; // meme arg pour tous
 			t_arg.boophf = this;
@@ -1428,7 +1520,14 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
 				
 				for(int ii=0;ii<_num_thread;ii++)
-					pthread_create (&tab_threads[ii], NULL,  thread_processLevel<elem_t, Hasher_t, Range, disklevel_it_type>, &t_arg); //&t_arg[ii]
+					#ifdef _WIN32
+					tab_threads[ii] = CreateThread(NULL, 0, 
+						(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, disklevel_it_type>, 
+						&t_arg, 0, NULL);
+					#else
+					pthread_create(&tab_threads[ii], NULL, 
+						thread_processLevel<elem_t, Hasher_t, Range, disklevel_it_type>, &t_arg); //&t_arg[ii]
+					#endif
 			
 			
 				//must join here before the block is closed and file_binary is destroyed (and closes the file)
@@ -1454,14 +1553,28 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 					 so, casting to (void*) because of that; and we remember the type in the template */
 					
 					for(int ii=0;ii<_num_thread;ii++)
-						pthread_create (&tab_threads[ii], NULL,  thread_processLevel<elem_t, Hasher_t, Range, fastmode_it_type>, &t_arg); //&t_arg[ii]
+						#ifdef _WIN32
+						tab_threads[ii] = CreateThread(NULL, 0,
+							(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, fastmode_it_type>,
+							&t_arg, 0, NULL);
+						#else
+						pthread_create(&tab_threads[ii], NULL, 
+							thread_processLevel<elem_t, Hasher_t, Range, fastmode_it_type>, &t_arg); //&t_arg[ii]
+						#endif
 					
 					
 				}
 				else
 				{
 					for(int ii=0;ii<_num_thread;ii++)
-						pthread_create (&tab_threads[ii], NULL,  thread_processLevel<elem_t, Hasher_t, Range, decltype(input_range.begin())>, &t_arg); //&t_arg[ii]
+						#ifdef _WIN32
+						tab_threads[ii] = CreateThread(NULL, 0,
+							(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, decltype(input_range.begin())>,
+							&t_arg, 0, NULL);
+						#else
+						pthread_create(&tab_threads[ii], NULL, 
+							thread_processLevel<elem_t, Hasher_t, Range, decltype(input_range.begin())>, &t_arg); //&t_arg[ii]
+						#endif
 				}
 				//joining
 				for(int ii=0;ii<_num_thread;ii++)
@@ -1531,17 +1644,25 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		FILE * _currlevelFile;
 		int _pid;
 	public:
+		#ifdef _WIN32
+		CRITICAL_SECTION _mutex;
+		#else
 		pthread_mutex_t _mutex;
+		#endif
 	};
 
 ////////////////////////////////////////////////////////////////
-#pragma mark -
-#pragma mark threading
+// #pragma mark -
+// #pragma mark threading
 ////////////////////////////////////////////////////////////////
 
 
     template <typename elem_t, typename Hasher_t, typename Range, typename it_type>
+	#ifdef _WIN32
+	DWORD WINAPI thread_processLevel(LPVOID args)
+	#else
 	void * thread_processLevel(void * args)
+	#endif
 	{
 		if(args ==NULL) return NULL;
 
@@ -1552,12 +1673,24 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		std::vector<elem_t> buffer;
 		buffer.resize(NBBUFF);
 		
-		pthread_mutex_t * mutex =  & obw->_mutex;
+		#ifdef _WIN32
+		CRITICAL_SECTION * mutex = &obw->_mutex;
+		#else
+		pthread_mutex_t * mutex = &obw->_mutex;
+		#endif
 
+		#ifdef _WIN32
+		EnterCriticalSection(mutex); // from comment above: "//get starting iterator for this thread, must be protected (must not be currently used by other thread to copy elems in buff)"
+		#else
 		pthread_mutex_lock(mutex); // from comment above: "//get starting iterator for this thread, must be protected (must not be currently used by other thread to copy elems in buff)"
+		#endif
         std::shared_ptr<it_type> startit = std::static_pointer_cast<it_type>(targ->it_p);
         std::shared_ptr<it_type> until_p = std::static_pointer_cast<it_type>(targ->until_p);
+		#ifdef _WIN32
+		LeaveCriticalSection(mutex);
+		#else
 		pthread_mutex_unlock(mutex);
+		#endif
 
 		obw->pthread_processLevel(buffer, startit, until_p, level);
 

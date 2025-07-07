@@ -43,7 +43,7 @@ int main (int argc, char* argv[]){
 	
 	//PARAMETERS
 	uint64_t nelem = 1000000;
-	uint nthreads = 1;
+	int nthreads = 1;
 
 	if(argc !=3 ){
 		printf("Usage :\n");

@@ -1,4 +1,4 @@
-#include "BooPHF.h"
+﻿#include "BooPHF.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,12 +41,8 @@ inline double get_time_usecs() {
 
 
 uint64_t random64 (){
-	uint64_t low, high,res;
-	low = random();
-	high = random();
-
-	res = (high << 32) + low;
-	return res;
+    static std::mt19937_64 rng(std::random_device{}());
+    return rng();
 }
 
 
