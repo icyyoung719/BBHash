@@ -1199,8 +1199,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 								
 								}
 								
-									myWriteBuff[writebuff++] = val;
-					
+									// myWriteBuff[writebuff++] = val;
+								// myWriteBuff = 0;
 							}
 							
 							

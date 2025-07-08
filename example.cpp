@@ -13,23 +13,25 @@ using namespace std;
 typedef boomphf::SingleHashFunctor<uint64_t>  hasher_t;
 typedef boomphf::mphf<  uint64_t, hasher_t  > boophf_t;
 
-int main (int argc, char* argv[]){
+int main (){
 	
 	//PARAMETERS
 	uint64_t nelem = 1000000;
 	int nthreads = 1;
 
-	if(argc !=3 ){
-		printf("Usage :\n");
-		printf("%s <nelem> <nthreads> \n",argv[0]);
-		return EXIT_FAILURE;
-	}
+	// if(argc !=3 ){
+	// 	printf("Usage :\n");
+	// 	printf("%s <nelem> <nthreads> \n",argv[0]);
+	// 	return EXIT_FAILURE;
+	// }
 	
-	if(argc ==3 ){
-		nelem = strtoul(argv[1], NULL,0);
-		nthreads = atoi(argv[2]);
-	}
-	
+	// if(argc ==3 ){
+	// 	nelem = strtoul(argv[1], NULL,0);
+	// 	nthreads = atoi(argv[2]);
+	// }
+	nelem = 1000000;
+	nthreads = 1;
+
 	uint64_t ii, jj;
 	uint64_t *data;
 
