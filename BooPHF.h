@@ -22,6 +22,7 @@
 #include "platform_time.h"
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
 #endif
 
 
@@ -29,19 +30,22 @@
 namespace boomphf {
 
 	
-	inline uint64_t printPt(thread_t pt) {
 	#ifdef _WIN32
-		// Windows 版本：HANDLE 通常是指针或句柄，转换为数值即可
-		return (uint64_t)(uintptr_t)pt;
+	#include <windows.h>
+	inline uint64_t printPt(DWORD tid) {
+		// 简单处理：直接返回 tid 或做些扰动
+		return static_cast<uint64_t>(tid);
+	}
 	#else
-		unsigned char *ptc = (unsigned char*)(void*)(&pt);
+	inline uint64_t printPt(pthread_t pt) {
+		unsigned char* ptc = (unsigned char*)(void*)(&pt);
 		uint64_t res = 0;
 		for (size_t i = 0; i < sizeof(pt); i++) {
-		res += (unsigned)(ptc[i]);
+			res += static_cast<unsigned>(ptc[i]);
 		}
 		return res;
-	#endif
 	}
+	#endif
 
 	
 	
@@ -998,7 +1002,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			std::vector<elem_t>().swap(setLevelFastmode);   // clear setLevelFastmode reallocating
 
 
-			pthread_mutex_destroy(&_mutex);
+			#ifdef _WIN32
+				DeleteCriticalSection(&_mutex);
+			#else
+				pthread_mutex_destroy(&_mutex);
+			#endif
 			
 			_built = true;
 		}
@@ -1088,17 +1096,13 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			{
 
 				//safely copy n items into buffer
-				#ifdef _WIN32
-				EnterCriticalSection(&_mutex);
-				#else
-				pthread_mutex_lock(&_mutex);
-				#endif
+				mutex_lock(&_mutex);
                 for(; inbuff<NBBUFF && (*shared_it)!=until;  ++(*shared_it))
 				{
                     buffer[inbuff]= *(*shared_it); inbuff++;
 				}
 				if((*shared_it)==until) isRunning =false;
-				pthread_mutex_unlock(&_mutex);
+				mutex_unlock(&_mutex);
 
 
 				//do work on the n elems of the buffer
@@ -1162,7 +1166,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 							#endif
 							// calc rank de fin  precedent level qq part, puis init hashidx avec ce rank, direct minimal, pas besoin inser ds bitset et rank
 							_final_hash[val] = hashidx;
-							pthread_mutex_unlock(&_mutex);
+							mutex_unlock(&_mutex);
 						}
 						else
 						{
@@ -1174,25 +1178,24 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 							{
 								if(writebuff>=NBBUFF)
 								{
-									//flush buffer
-									#ifdef _WIN32
-									// Windows不支持flockfile，使用文件独占锁
+
+								#ifdef _WIN32
+								{
 									OVERLAPPED ol = {0};
 									HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
 									LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
-									#else
-									flockfile(_currlevelFile);
-									#endif
-									fwrite(myWriteBuff.data(),sizeof(elem_t),writebuff,_currlevelFile);
-									#ifdef _WIN32
-									// 解锁文件
-									OVERLAPPED ol = {0};
-									HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
+
+									fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
+
 									UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
-									#else
+								}
+								#else
+								{
+									flockfile(_currlevelFile);
+									fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
 									funlockfile(_currlevelFile);
-									#endif
-									writebuff = 0;
+								}
+								#endif
 								
 								}
 								
@@ -1229,10 +1232,24 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			
 			if(_writeEachLevel && writebuff>0)
 			{
-				//flush buffer
-				flockfile(_currlevelFile);
-				fwrite(myWriteBuff.data(),sizeof(elem_t),writebuff,_currlevelFile);
-				funlockfile(_currlevelFile);
+			#if defined(_WIN32)
+				{
+					OVERLAPPED ol = {0};
+					HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
+					LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
+
+					fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
+
+					UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
+				}
+			#else
+				{
+					flockfile(_currlevelFile);
+					fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
+					funlockfile(_currlevelFile);
+				}
+			#endif
+
 				writebuff = 0;
 			}
 
@@ -1533,7 +1550,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				//must join here before the block is closed and file_binary is destroyed (and closes the file)
 				for(int ii=0;ii<_num_thread;ii++)
 				{
-					pthread_join(tab_threads[ii], NULL);
+					joinThread(tab_threads[ii]);
 				}
 				
 			}
@@ -1579,7 +1596,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				//joining
 				for(int ii=0;ii<_num_thread;ii++)
 				{
-					pthread_join(tab_threads[ii], NULL);
+					joinThread(tab_threads[ii]);
 				}
 			}
 			//printf("\ngoing to level %i  : %llu elems  %.2f %%  expected : %.2f %% \n",i,_cptLevel,100.0* _cptLevel/(float)_nelem,100.0* pow(_proba_collision,i) );
@@ -1620,12 +1637,12 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		uint64_t _nelem;
         std::unordered_map<elem_t,uint64_t,Hasher_t> _final_hash;
 		Progress _progressBar;
-		int _nb_living;
+		volatile long _nb_living;
 		int _num_thread;
-		uint64_t _hashidx;
+		volatile __int64 _hashidx;
 		double _proba_collision;
 		uint64_t _lastbitsetrank;
-		uint64_t _idxLevelsetLevelFastmode;
+		volatile __int64 _idxLevelsetLevelFastmode;
 		uint64_t _cptLevel;
 		uint64_t _cptTotalProcessed;
 

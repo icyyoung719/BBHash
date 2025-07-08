@@ -8,6 +8,15 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+
+# 禁用warning
+add_compile_options(
+    $<$<CXX_COMPILER_ID:MSVC>:/w>
+    $<$<CXX_COMPILER_ID:GNU>:-w>
+    $<$<CXX_COMPILER_ID:Clang>:-w>
+)
+
+
 # 通用编译选项
 set(COMMON_FLAGS "")
 if (MSVC)
@@ -32,13 +41,13 @@ add_compile_options(${COMMON_FLAGS})
 include_directories(${CMAKE_SOURCE_DIR})
 
 # 添加可执行文件
-add_executable(Bootest bootest.cpp)
+# add_executable(Bootest bootest.cpp)
 add_executable(example example.cpp)
-add_executable(example_custom_hash example_custom_hash.cpp)
+# add_executable(example_custom_hash example_custom_hash.cpp)
 
 # 链接 pthread （非 Windows 平台）
 if (NOT MSVC)
-  target_link_libraries(Bootest pthread)
+  # target_link_libraries(Bootest pthread)
   target_link_libraries(example pthread)
-  target_link_libraries(example_custom_hash pthread)
+  # target_link_libraries(example_custom_hash pthread)
 endif()

@@ -3,7 +3,8 @@
         "memory": "cpp",
         "random": "cpp",
         "xutility": "cpp",
-        "atomic": "cpp"
+        "atomic": "cpp",
+        "vector": "cpp"
     },
     "Codegeex.RepoIndex": true
 }

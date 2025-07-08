@@ -43,6 +43,7 @@
 
 
 #ifdef _MSC_VER
+using uint = unsigned int;
 #include <windows.h>  // 包含 Interlocked 系列函数声明
 
 inline void atomic_fetch_or(uint64_t* addr, uint64_t val) {
@@ -84,4 +85,38 @@ inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* _bitArray)
     uint64_t oldval = __sync_fetch_and_or(_bitArray + (pos >> 6), (1ULL << (pos & 63)));
     return (oldval >> (pos & 63)) & 1;
 }
+#endif
+
+
+inline void joinThread(
+#ifdef _WIN32
+    HANDLE thread
+#else
+    pthread_t thread
+#endif
+) {
+#ifdef _WIN32
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+#else
+    pthread_join(thread, NULL);
+#endif
+}
+
+
+
+#ifdef _WIN32
+    #include <windows.h>
+    typedef CRITICAL_SECTION mutex_t;
+    #define mutex_init(m)    InitializeCriticalSection(m)
+    #define mutex_destroy(m) DeleteCriticalSection(m)
+    #define mutex_lock(m)    EnterCriticalSection(m)
+    #define mutex_unlock(m)  LeaveCriticalSection(m)
+#else
+    #include <pthread.h>
+    typedef pthread_mutex_t mutex_t;
+    #define mutex_init(m)    pthread_mutex_init(m, NULL)
+    #define mutex_destroy(m) pthread_mutex_destroy(m)
+    #define mutex_lock(m)    pthread_mutex_lock(m)
+    #define mutex_unlock(m)  pthread_mutex_unlock(m)
 #endif
