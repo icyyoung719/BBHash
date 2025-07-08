@@ -6,6 +6,8 @@
 #include <string.h>
 #include <random>
 #include <algorithm>
+#include <iostream>
+#include <fstream>
 #include <inttypes.h>
 
 using namespace std;
@@ -87,6 +89,20 @@ int main (){
 	//query mphf like this
 	uint64_t  idx = bphf->lookup(data[0]);
 	printf(" example query  %" PRIu64 " ----->  %" PRIu64 " \n",data[0],idx);
+
+	std::ofstream os("example.mphf", std::ios::binary);
+	bphf->save(os);
+
+	boophf_t* bphf_load = new boomphf::mphf<uint64_t,hasher_t>();
+	std::ifstream is("example.mphf", std::ios::binary);
+	bphf_load->load(is);
+
+	// TEST query
+	for (ii = 0; ii < nelem; ii++){
+		idx = bphf_load->lookup(data[ii]);
+		if (idx != ii)
+			printf("ERROR: query failed for %" PRIu64 " ----->  %" PRIu64 " \n",data[ii],idx);
+	}
 	
 	free(data);
 	delete bphf;
