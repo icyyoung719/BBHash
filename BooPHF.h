@@ -699,7 +699,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			}
 			printf("\n");
 
-			printf("rank array : size %lu \n",_ranks.size());
+			printf("rank array : size %zu \n",_ranks.size());
 			for (uint64_t ii = 0; ii< _ranks.size(); ii++)
 			{
 				printf("%llu :  %lli,  ",(long long unsigned int)ii,(long long int)_ranks[ii]);
