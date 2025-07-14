@@ -812,8 +812,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			os.write(reinterpret_cast<char const*>(&_size), sizeof(_size));
 			os.write(reinterpret_cast<char const*>(&_nchar), sizeof(_nchar));
 			os.write(reinterpret_cast<char const*>(_bitArray), (std::streamsize)(sizeof(uint64_t) * _nchar));
-			size_t sizer = _ranks.size();
-			os.write(reinterpret_cast<char const*>(&sizer),  sizeof(size_t));
+			uint64_t sizer = _ranks.size();
+			os.write(reinterpret_cast<char const*>(&sizer),  sizeof(uint64_t));
 			os.write(reinterpret_cast<char const*>(_ranks.data()), (std::streamsize)(sizeof(_ranks[0]) * _ranks.size()));
 		}
 
@@ -824,8 +824,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			this->resize(_size);
 			is.read(reinterpret_cast<char *>(_bitArray), (std::streamsize)(sizeof(uint64_t) * _nchar));
 
-			size_t sizer;
-			is.read(reinterpret_cast<char *>(&sizer),  sizeof(size_t));
+			uint64_t sizer;
+			is.read(reinterpret_cast<char *>(&sizer),  sizeof(uint64_t));
 			_ranks.resize(sizer);
 			is.read(reinterpret_cast<char*>(_ranks.data()), (std::streamsize)(sizeof(_ranks[0]) * _ranks.size()));
 		}
@@ -833,7 +833,6 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 	protected:
 		uint64_t*  _bitArray;
-		//uint64_t* _bitArray;
 		uint64_t _size;
 		uint64_t _nchar;
 
@@ -978,7 +977,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			}
 
 			uint64_t offset = 0;
-			for(int ii = 0; ii< _nb_levels; ii++)
+			for(uint32_t ii = 0; ii< _nb_levels; ii++)
 			{
 				_tempBitset =  new bitVector(_levels[ii].hash_domain); // temp collision bitarray for this level
 
@@ -1061,7 +1060,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		{
 
 			uint64_t totalsizeBitset = 0;
-			for(int ii=0; ii<_nb_levels; ii++)
+			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 				totalsizeBitset += _levels[ii].bitset.bitSize();
 			}
@@ -1263,7 +1262,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			os.write(reinterpret_cast<char const*>(&_nb_levels), sizeof(_nb_levels));
 			os.write(reinterpret_cast<char const*>(&_lastbitsetrank), sizeof(_lastbitsetrank));
 			os.write(reinterpret_cast<char const*>(&_nelem), sizeof(_nelem));
-			 for(int ii=0; ii<_nb_levels; ii++)
+			 for(uint32_t ii=0; ii<_nb_levels; ii++)
 			 {
 			  	_levels[ii].bitset.save(os);
 			 }
@@ -1294,7 +1293,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			_levels.resize(_nb_levels);
 			
 
-			for(int ii=0; ii<_nb_levels; ii++)
+			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 				//_levels[ii].bitset = new bitVector();
 				_levels[ii].bitset.load(is);
@@ -1306,7 +1305,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			_proba_collision = 1.0 -  pow(((_gamma*(double)_nelem -1 ) / (_gamma*(double)_nelem)),_nelem-1);
 			uint64_t previous_idx =0;
 			_hash_domain = (size_t)  (ceil(double(_nelem) * _gamma)) ;
-			for(int ii=0; ii<_nb_levels; ii++)
+			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 				//_levels[ii] = new level();
 				_levels[ii].idx_begin = previous_idx;
@@ -1366,7 +1365,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			bufferperThread.resize(_num_thread);
 			if(_writeEachLevel)
 			{
-				for(int ii=0; ii<_num_thread; ii++)
+				for(uint32_t ii=0; ii<_num_thread; ii++)
 				{
 					bufferperThread[ii].resize(NBBUFF);
 				}
@@ -1382,7 +1381,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 			//build levels
 			uint64_t previous_idx =0;
-			for(int ii=0; ii<_nb_levels; ii++)
+			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 
 				_levels[ii].idx_begin = previous_idx;
@@ -1397,7 +1396,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 			}
 			
-			for(int ii=0; ii<_nb_levels; ii++)
+			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 				 if(pow(_proba_collision,ii) < _percent_elem_loaded_for_fastMode)
 				 {
@@ -1417,7 +1416,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			int level = 0;
 			uint64_t hash_raw=0;
 
-			for (int ii = 0; ii<(_nb_levels-1) &&  ii < maxlevel ; ii++ )
+			for (uint32_t ii = 0; ii<(_nb_levels-1) &&  ii < maxlevel ; ii++ )
 			{
 
 				//calc le hash suivant
@@ -1536,7 +1535,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
 				t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
 				
-				for(int ii=0;ii<_num_thread;ii++)
+				for(uint32_t ii=0;ii<_num_thread;ii++)
 					#ifdef _WIN32
 					tab_threads[ii] = CreateThread(NULL, 0, 
 						(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, disklevel_it_type>, 
@@ -1548,7 +1547,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			
 			
 				//must join here before the block is closed and file_binary is destroyed (and closes the file)
-				for(int ii=0;ii<_num_thread;ii++)
+				for(uint32_t ii=0;ii<_num_thread;ii++)
 				{
 					joinThread(tab_threads[ii]);
 				}
@@ -1569,7 +1568,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 					/* we'd like to do t_arg.it = data_iterator.begin() but types are different;
 					 so, casting to (void*) because of that; and we remember the type in the template */
 					
-					for(int ii=0;ii<_num_thread;ii++)
+					for(uint32_t ii=0;ii<_num_thread;ii++)
 						#ifdef _WIN32
 						tab_threads[ii] = CreateThread(NULL, 0,
 							(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, fastmode_it_type>,
@@ -1583,7 +1582,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				}
 				else
 				{
-					for(int ii=0;ii<_num_thread;ii++)
+					for(uint32_t ii=0;ii<_num_thread;ii++)
 						#ifdef _WIN32
 						tab_threads[ii] = CreateThread(NULL, 0,
 							(LPTHREAD_START_ROUTINE)thread_processLevel<elem_t, Hasher_t, Range, decltype(input_range.begin())>,
@@ -1594,7 +1593,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 						#endif
 				}
 				//joining
-				for(int ii=0;ii<_num_thread;ii++)
+				for(uint32_t ii=0;ii<_num_thread;ii++)
 				{
 					joinThread(tab_threads[ii]);
 				}
@@ -1628,7 +1627,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 	private:
 		//level ** _levels;
 		std::vector<level> _levels;
-		int _nb_levels;
+		uint32_t _nb_levels;
         MultiHasher_t _hasher;
 		bitVector * _tempBitset;
 
@@ -1638,7 +1637,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
         std::unordered_map<elem_t,uint64_t,Hasher_t> _final_hash;
 		Progress _progressBar;
 		volatile long _nb_living;
-		int _num_thread;
+		uint32_t _num_thread;
 		volatile __int64 _hashidx;
 		double _proba_collision;
 		uint64_t _lastbitsetrank;
