@@ -42,12 +42,12 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 # 添加可执行文件
 # add_executable(Bootest bootest.cpp)
-add_executable(example example.cpp)
+add_executable(test test_min.cpp)
 # add_executable(example_custom_hash example_custom_hash.cpp)
 
 # 链接 pthread （非 Windows 平台）
 if (NOT MSVC)
   # target_link_libraries(Bootest pthread)
-  target_link_libraries(example pthread)
+  target_link_libraries(test pthread)
   # target_link_libraries(example_custom_hash pthread)
 endif()
