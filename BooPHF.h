@@ -927,8 +927,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		
 		// allow perc_elem_loaded  elements to be loaded in ram for faster construction (default 3%), set to 0 to desactivate
 		template <typename Range>
-		mphf( size_t n, Range const& input_range,int num_thread = 1,  double gamma = 2.0 , bool writeEach = true, bool progress =true, float perc_elem_loaded = 0.03) :
-		_gamma(gamma), _hash_domain(size_t(ceil(double(n) * gamma))), _nelem(n), _num_thread(num_thread), _percent_elem_loaded_for_fastMode (perc_elem_loaded), _withprogress(progress)
+		mphf( uint64_t n, Range const& input_range,int num_thread = 1,  double gamma = 2.0 , bool writeEach = true, bool progress =true, float perc_elem_loaded = 0.03) :
+		_gamma(gamma), _hash_domain(static_cast<uint64_t>(ceil(double(n) * gamma))), _nelem(n), _num_thread(num_thread), _percent_elem_loaded_for_fastMode (perc_elem_loaded), _withprogress(progress)
 		{
 			if(n ==0) return;
 			
@@ -1268,9 +1268,9 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			 }
 
 			//save final hash
-			size_t final_hash_size = _final_hash.size();
+			uint64_t final_hash_size = _final_hash.size();
 
-			os.write(reinterpret_cast<char const*>(&final_hash_size), sizeof(size_t));
+			os.write(reinterpret_cast<char const*>(&final_hash_size), sizeof(uint64_t));
 
 
 			// typename std::unordered_map<elem_t,uint64_t,Hasher_t>::iterator
@@ -1304,7 +1304,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			//mini setup, recompute size of each level
 			_proba_collision = 1.0 -  pow(((_gamma*(double)_nelem -1 ) / (_gamma*(double)_nelem)),_nelem-1);
 			uint64_t previous_idx =0;
-			_hash_domain = (size_t)  (ceil(double(_nelem) * _gamma)) ;
+			_hash_domain = (uint64_t)  (ceil(double(_nelem) * _gamma)) ;
 			for(uint32_t ii=0; ii<_nb_levels; ii++)
 			{
 				//_levels[ii] = new level();
@@ -1318,11 +1318,11 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			//restore final hash
 
 			_final_hash.clear();
-			size_t final_hash_size ;
+			uint64_t final_hash_size ;
 
-			is.read(reinterpret_cast<char *>(&final_hash_size), sizeof(size_t));
+			is.read(reinterpret_cast<char *>(&final_hash_size), sizeof(uint64_t));
 
-			for(unsigned int ii=0; ii<final_hash_size; ii++)
+			for(uint64_t ii=0; ii<final_hash_size; ii++)
 			{
 				elem_t key;
 				uint64_t value;
