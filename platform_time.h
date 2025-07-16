@@ -51,57 +51,13 @@ inline int gettimeofday(struct timeval* tp, void* /*tzp*/) {
     return 0;
 }
 
-inline void sleep_ms(int ms) {
-    Sleep(ms);
-}
-
-#else
-
-inline void sleep_ms(int ms) {
-    usleep(ms * 1000);
-}
-
 #endif
 
-// ============================
-// 线程相关工具
-// ============================
-inline void joinThread(thread_t thread) {
-#ifdef _WIN32
-    WaitForSingleObject(thread, INFINITE);
-    CloseHandle(thread);
-#else
-    pthread_join(thread, nullptr);
-#endif
-}
-
-// ============================
-// 互斥锁封装
-// ============================
-#ifdef _WIN32
-    #define mutex_init(m)    InitializeCriticalSection(m)
-    #define mutex_destroy(m) DeleteCriticalSection(m)
-    #define mutex_lock(m)    EnterCriticalSection(m)
-    #define mutex_unlock(m)  LeaveCriticalSection(m)
-#else
-    #define mutex_init(m)    pthread_mutex_init(m, nullptr)
-    #define mutex_destroy(m) pthread_mutex_destroy(m)
-    #define mutex_lock(m)    pthread_mutex_lock(m)
-    #define mutex_unlock(m)  pthread_mutex_unlock(m)
-#endif
 
 // ============================
 // 原子操作
 // ============================
 #ifdef _MSC_VER
-
-inline void atomic_fetch_or(uint64_t* addr, uint64_t val) {
-    InterlockedOr64(reinterpret_cast<volatile LONG64*>(addr), val);
-}
-
-inline void atomic_fetch_and(uint64_t* addr, uint64_t val) {
-    InterlockedAnd64(reinterpret_cast<volatile LONG64*>(addr), val);
-}
 
 inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* bitArray) {
     uint64_t mask = (1ULL << (pos & 63));
@@ -116,14 +72,6 @@ inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* bitArray) {
 }
 
 #else
-
-inline void atomic_fetch_or(uint64_t* addr, uint64_t val) {
-    __sync_fetch_and_or(addr, val);
-}
-
-inline void atomic_fetch_and(uint64_t* addr, uint64_t val) {
-    __sync_fetch_and_and(addr, val);
-}
 
 inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* bitArray) {
     uint64_t oldval = __sync_fetch_and_or(bitArray + (pos >> 6), (1ULL << (pos & 63)));

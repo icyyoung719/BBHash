@@ -145,6 +145,11 @@ namespace boomphf {
 				throw std::invalid_argument("Error opening " + std::string(filename));
 			}
 		}
+
+		    file_binary(const std::string& filename)
+				: file_binary(filename.c_str())
+			{}
+
 		
 		~file_binary()
 		{
@@ -989,25 +994,10 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			_levels[i].bitset =  bitVector(_levels[i].hash_domain); ;
 
 			//printf("---process level %i   wr %i fast %i ---\n",i,_writeEachLevel,_fastmode);
-			
-			char fname_old[1000];
-			sprintf(fname_old,"temp_p%i_level_%i",_pid,i-2);
-			
-			char fname_curr[1000];
-			#ifdef _WIN32
-			// 确保Windows路径格式正确
-			sprintf(fname_curr,"temp_p%i_level_%i.tmp",_pid,i);
-			#else
-			sprintf(fname_curr,"temp_p%i_level_%i",_pid,i);
-			#endif
-			
-			char fname_prev[1000];
-			#ifdef _WIN32
-			// 确保Windows路径格式正确
-			sprintf(fname_prev,"temp_p%i_level_%i.tmp",_pid,i-1);
-			#else
-			sprintf(fname_prev,"temp_p%i_level_%i",_pid,i-1);
-			#endif
+
+			std::string fname_old   = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 2) + ".tmp";
+			std::string fname_curr  = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i)     + ".tmp";
+			std::string fname_prev  = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 1) + ".tmp";
 			
 			if(_writeEachLevel)
 			{
@@ -1015,12 +1005,12 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				
 				if(i>2) //delete previous file
 				{
-					unlink(fname_old);
+					std::remove(fname_old.c_str());
 				}
 				
 				if(i< _nb_levels-1 && i > 0 ) //create curr file
 				{
-					_currlevelFile = fopen(fname_curr,"w");
+					_currlevelFile = std::fopen(fname_curr.c_str(), "w");
 				}
 			}
 			
@@ -1136,7 +1126,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				
 					if(i== _nb_levels- 1) //delete last file
 					{
-						unlink(fname_prev);
+						std::remove(fname_prev.c_str());
 					}
 			}
 
