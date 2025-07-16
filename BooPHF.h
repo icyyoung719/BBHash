@@ -574,7 +574,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			//printf("used temp ram for construction : %lli MB \n",setLevelFastmode.capacity()* sizeof(elem_t) /1024ULL/1024ULL);
 
 			std::vector<elem_t>().swap(setLevelFastmode);   // clear setLevelFastmode reallocating
-
+			std::lock_guard<std::mutex> lock(_mutex);
 			_built = true;
 		}
 
@@ -663,13 +663,14 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			{
 
 				//safely copy n items into buffer
-				std::lock_guard<std::mutex> lock(_mutex);
-                for(; inbuff<NBBUFF && (*shared_it)!=until;  ++(*shared_it))
 				{
-                    buffer[inbuff]= *(*shared_it); inbuff++;
+					std::lock_guard<std::mutex> lock(_mutex);
+					for(; inbuff<NBBUFF && (*shared_it)!=until;  ++(*shared_it))
+					{
+						buffer[inbuff]= *(*shared_it); inbuff++;
+					}
+					if((*shared_it)==until) isRunning =false;
 				}
-				if((*shared_it)==until) isRunning =false;
-
 
 				//do work on the n elems of the buffer
 			//	printf("filling input  buff \n");
@@ -726,8 +727,6 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 							#endif
 
 							std::lock_guard<std::mutex> lock(_mutex);
-							printf("val=%llu, _final_hash.size()=%llu\n", (unsigned long long)val, (unsigned long long)_final_hash.size());
-							assert(val < _final_hash.size());
 							// calc rank de fin  precedent level qq part, puis init hashidx avec ce rank, direct minimal, pas besoin inser ds bitset et rank
 							_final_hash[val] = hashidx;
 						}
