@@ -6,29 +6,22 @@
 #include <stdio.h>
 #include <climits>
 #include <stdlib.h>
-#include <iostream>
 #include <math.h>
+#include <string.h>
+#include <inttypes.h>
+#include <assert.h>
 
+#include <iostream>
 #include <array>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <thread>
-#include <assert.h>
-// #include <sys/time.h>
-#include <string.h>
 #include <memory> // for make_shared
-// #include <unistd.h>
-#include <inttypes.h>
 
 #include "platform_time.h"
 #include "bitvector.hpp"
 #include "progress.hpp"
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#endif
-
 
 
 namespace boomphf {
@@ -713,25 +706,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 							{
 								if(writebuff>=NBBUFF)
 								{
-
-								#ifdef _WIN32
-								{
-									OVERLAPPED ol = {0};
-									HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
-									LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
-
-									fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
-
-									UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
-								}
-								#else
-								{
-									flockfile(_currlevelFile);
-									fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
-									funlockfile(_currlevelFile);
-								}
-								#endif
-								
+									write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
 								}
 								
 									// myWriteBuff[writebuff++] = val;
@@ -767,23 +742,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			
 			if(_writeEachLevel && writebuff>0)
 			{
-			#if defined(_WIN32)
-				{
-					OVERLAPPED ol = {0};
-					HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(_currlevelFile));
-					LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
-
-					fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
-
-					UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
-				}
-			#else
-				{
-					flockfile(_currlevelFile);
-					fwrite(myWriteBuff.data(), sizeof(elem_t), writebuff, _currlevelFile);
-					funlockfile(_currlevelFile);
-				}
-			#endif
+				write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
 
 				writebuff = 0;
 			}

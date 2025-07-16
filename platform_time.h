@@ -17,20 +17,24 @@
 
 #include <cstdint>
 
-// ============================
-// 类型定义
-// ============================
-#ifdef _WIN32
-    using thread_t = HANDLE;
-    typedef CRITICAL_SECTION mutex_t;
-#else
-    using thread_t = pthread_t;
-    typedef pthread_mutex_t mutex_t;
-#endif
 
-#ifdef _MSC_VER
-    using uint = unsigned int;
+template<typename T>
+inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_t count) {
+#ifdef _WIN32
+    OVERLAPPED ol = {0};
+    HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(file));
+    LockFileEx(fileHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ol);
+
+    fwrite(buffer.data(), sizeof(T), count, file);
+
+    UnlockFileEx(fileHandle, 0, MAXDWORD, MAXDWORD, &ol);
+#else
+    flockfile(file);
+    fwrite(buffer.data(), sizeof(T), count, file);
+    funlockfile(file);
 #endif
+}
+
 
 // ============================
 // 时间相关工具
