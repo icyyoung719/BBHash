@@ -1,12 +1,17 @@
 #include <cstdlib>
 #include <stdint.h>
+#include <vector>
+#include <iostream>
+#include <ostream>
+#include <cassert>
 #include <memory.h>
 
-// #ifdef _WIN32
-// #include <windows.h>
-// #include <io.h>
-// #endif
-
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 	
 	
 inline unsigned int popcount_32(unsigned int x)
