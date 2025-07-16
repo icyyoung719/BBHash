@@ -40,10 +40,17 @@ add_compile_options(${COMMON_FLAGS})
 # 包含当前目录头文件
 include_directories(${CMAKE_SOURCE_DIR})
 
+set(SOURCES
+    test_min.cpp
+)
+
 # 添加可执行文件
-# add_executable(Bootest bootest.cpp)
-add_executable(test test_min.cpp)
-# add_executable(example_custom_hash example_custom_hash.cpp)
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 
 # 链接 pthread （非 Windows 平台）
 if (NOT MSVC)
