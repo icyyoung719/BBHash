@@ -13,6 +13,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <thread>
 #include <assert.h>
 // #include <sys/time.h>
 #include <string.h>
@@ -32,26 +33,6 @@
 
 namespace boomphf {
 
-	
-	#ifdef _WIN32
-	#include <windows.h>
-	inline uint64_t printPt(DWORD tid) {
-		// 简单处理：直接返回 tid 或做些扰动
-		return static_cast<uint64_t>(tid);
-	}
-	#else
-	inline uint64_t printPt(pthread_t pt) {
-		unsigned char* ptc = (unsigned char*)(void*)(&pt);
-		uint64_t res = 0;
-		for (size_t i = 0; i < sizeof(pt); i++) {
-			res += static_cast<unsigned>(ptc[i]);
-		}
-		return res;
-	}
-	#endif
-
-	
-	
 ////////////////////////////////////////////////////////////////
 // #pragma mark -
 // #pragma mark utils
@@ -647,11 +628,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
         void pthread_processLevel( std::vector<elem_t>  & buffer , std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
 		{
 			uint64_t nb_done =0;
-			#ifdef _WIN32
-			int tid = InterlockedIncrement(&_nb_living) - 1;
-			#else
-			int tid = __sync_fetch_and_add(&_nb_living, 1);
-			#endif
+			int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
 			auto until = *until_p;
 			uint64_t inbuff =0;
 
@@ -704,11 +681,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 						if(_fastmode && i == _fastModeLevel)
 						{
 
-							#ifdef _WIN32
-							uint64_t idxl2 = InterlockedIncrement64(&_idxLevelsetLevelFastmode) - 1;
-							#else
-							uint64_t idxl2 = __sync_fetch_and_add(&_idxLevelsetLevelFastmode,1);
-							#endif
+							int idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
 							//si depasse taille attendue pour setLevelFastmode, fall back sur slow mode mais devrait pas arriver si hash ok et proba avec nous
 							if(idxl2>= setLevelFastmode.size())
 								_fastmode = false;
@@ -719,12 +692,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 						//insert to level i+1 : either next level of the cascade or final hash if last level reached
 						if(i == _nb_levels-1) //stop cascade here, insert into exact hash
 						{
-
-							#ifdef _WIN32
-							uint64_t hashidx = InterlockedIncrement64(&_hashidx) - 1;
-							#else
-							uint64_t hashidx = __sync_fetch_and_add(&_hashidx, 1);
-							#endif
+							uint64_t hashidx = _hashidx.fetch_add(1, std::memory_order_relaxed);
 
 							std::lock_guard<std::mutex> lock(_mutex);
 							// calc rank de fin  precedent level qq part, puis init hashidx avec ce rank, direct minimal, pas besoin inser ds bitset et rank
@@ -903,11 +871,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 		void setup()
 		{
-			#ifdef _WIN32
-			_pid = GetCurrentProcessId() + printPt(GetCurrentThreadId());
-			#else
-			_pid = getpid() + printPt(pthread_self());
-			#endif
+			uint64_t tid_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+			_pid = static_cast<int>(tid_hash);
 			//printf("pt self %llu  pid %i \n",printPt(pthread_self()),_pid);
 
 			_cptTotalProcessed=0;
@@ -1061,9 +1026,9 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			
 			
 			_cptLevel = 0;
-			_hashidx = 0;
-			_idxLevelsetLevelFastmode =0;
-			_nb_living =0;
+			_hashidx.store(0, std::memory_order_relaxed);
+			_idxLevelsetLevelFastmode.store(0, std::memory_order_relaxed);
+			_nb_living.store(0, std::memory_order_relaxed);
 			//create  threads
 			std::vector<std::thread> tab_threads;
 			tab_threads.reserve(_num_thread);
@@ -1189,12 +1154,12 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		uint64_t _nelem;
         std::unordered_map<elem_t,uint64_t,Hasher_t> _final_hash;
 		Progress _progressBar;
-		volatile long _nb_living;
+		std::atomic<uint32_t> _nb_living{0};
 		uint32_t _num_thread;
-		volatile __int64 _hashidx;
+		std::atomic<uint64_t> _hashidx{0};
 		double _proba_collision;
 		uint64_t _lastbitsetrank;
-		volatile __int64 _idxLevelsetLevelFastmode;
+		std::atomic<uint64_t> _idxLevelsetLevelFastmode;
 		uint64_t _cptLevel;
 		uint64_t _cptTotalProcessed;
 
