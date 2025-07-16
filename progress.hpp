@@ -12,37 +12,6 @@
 #include <sys/time.h>
 #endif
 
-// // ============================
-// // 时间相关工具
-// // ============================
-// #ifdef _WIN32
-
-// // // 模拟 UNIX gettimeofday
-// // struct timeval {
-// //     long tv_sec;   // seconds
-// //     long tv_usec;  // microseconds
-// // };
-
-// inline int gettimeofday(struct timeval* tp, void* /*tzp*/) {
-//     struct _timeb timebuffer;
-//     _ftime_s(&timebuffer);
-//     tp->tv_sec = static_cast<long>(timebuffer.time);
-//     tp->tv_usec = static_cast<long>(timebuffer.millitm) * 1000;
-//     return 0;
-// }
-
-// inline void sleep_ms(int ms) {
-//     Sleep(ms);
-// }
-
-// #else
-
-// inline void sleep_ms(int ms) {
-//     usleep(ms * 1000);
-// }
-
-// #endif
-
 
 ///// progress bar
 class Progress
