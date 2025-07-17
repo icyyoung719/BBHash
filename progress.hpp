@@ -1,16 +1,11 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <chrono>
+
 #include <stdint.h>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <sys/timeb.h>   // for _ftime_s
-#pragma comment(lib, "ws2_32.lib")
-#else
-#include <sys/time.h>
-#endif
+
 
 
 ///// progress bar
@@ -18,8 +13,8 @@ class Progress
 {
 public:
     int timer_mode;
-    struct timeval timestamp;
-    double heure_debut, heure_actuelle ;
+    std::chrono::steady_clock::time_point start_time;
+    double heure_actuelle ;
     std::string   message;
 
     uint64_t done;
@@ -36,8 +31,7 @@ public:
     {
         _nthreads = nthreads;
         message = std::string(msg);
-        gettimeofday(&timestamp, NULL);
-        heure_debut = timestamp.tv_sec +(timestamp.tv_usec/1000000.0);
+        start_time = std::chrono::steady_clock::now();
 
         //fprintf(stderr,"| %-*s |\n",98,msg);
 
@@ -93,15 +87,16 @@ public:
         {
             if(timer_mode)
             {
-                gettimeofday(&timestamp, NULL);
-                heure_actuelle = timestamp.tv_sec +(timestamp.tv_usec/1000000.0);
-                double elapsed = heure_actuelle - heure_debut;
-                double speed = done / elapsed;
+                auto now = std::chrono::steady_clock::now();
+                std::chrono::duration<double> elapsed = now - start_time;
+                double seconds_elapsed = elapsed.count();
+                
+                double speed = done / seconds_elapsed;
                 double rem = (todo-done) / speed;
                 if(done>todo) rem=0;
-                int min_e  = (int)(elapsed / 60) ;
-                elapsed -= min_e*60;
-                int min_r  = (int)(rem / 60) ;
+                int min_e  = static_cast<int>(seconds_elapsed / 60) ;
+                seconds_elapsed -= min_e*60;
+                int min_r  = static_cast<int>(rem / 60) ;
                 rem -= min_r*60;
 
                 fprintf(stderr,"%c[%s]  %-5.3g%%   elapsed: %3i min %-2.0f sec   remaining: %3i min %-2.0f sec",13,
@@ -128,25 +123,25 @@ public:
         {
             if(timer_mode)
             {
-                struct timeval timet;
-                double now;
-                gettimeofday(&timet, NULL);
-                now = timet.tv_sec +(timet.tv_usec/1000000.0);
-                uint64_t total_done  = 0;
-                for (int ii=0; ii<_nthreads;ii++) total_done += (done_threaded[ii] );
-                double elapsed = now - heure_debut;
-                double speed = total_done / elapsed;
-                double rem = (todo-total_done) / speed;
-                if(total_done > todo) rem =0;
-                int min_e  =  (int)(elapsed / 60) ;
-                elapsed -= min_e*60;
-                int min_r  =  (int)(rem / 60) ;
-                rem -= min_r*60;
+            auto now = std::chrono::steady_clock::now();
+            double elapsed_sec = std::chrono::duration_cast<std::chrono::duration<double>>(now - start_time).count();
+
+            uint64_t total_done = 0;
+            for (int ii = 0; ii < _nthreads; ++ii)
+                total_done += done_threaded[ii];
+
+            double speed = total_done / elapsed_sec;
+            double remaining_sec = (todo > total_done) ? (todo - total_done) / speed : 0.0;
+
+            int min_e = static_cast<int>(elapsed_sec / 60);
+            double sec_e = elapsed_sec - min_e * 60;
+            int min_r = static_cast<int>(remaining_sec / 60);
+            double sec_r = remaining_sec - min_r * 60;
 
                     fprintf(stderr,"%c[%s]  %-5.3g%%   elapsed: %3i min %-2.0f sec   remaining: %3i min %-2.0f sec",13,
                         message.c_str(),
                         100*(double)total_done/todo,
-                        min_e,elapsed,min_r,rem);
+                        min_e,sec_e,min_r,sec_r);
             }
             else
             {

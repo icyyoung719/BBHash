@@ -6,11 +6,8 @@
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
-    #include <sys/timeb.h>   // for _ftime_s
-    #include <chrono>
     #pragma comment(lib, "ws2_32.lib")
 #else
-    #include <sys/time.h>
     #include <unistd.h>
     #include <pthread.h>
 #endif
@@ -34,28 +31,6 @@ inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_
     funlockfile(file);
 #endif
 }
-
-
-// ============================
-// 时间相关工具
-// ============================
-#ifdef _WIN32
-
-// 模拟 UNIX gettimeofday
-struct timeval {
-    long tv_sec;   // seconds
-    long tv_usec;  // microseconds
-};
-
-inline int gettimeofday(struct timeval* tp, void* /*tzp*/) {
-    struct _timeb timebuffer;
-    _ftime_s(&timebuffer);
-    tp->tv_sec = static_cast<long>(timebuffer.time);
-    tp->tv_usec = static_cast<long>(timebuffer.millitm) * 1000;
-    return 0;
-}
-
-#endif
 
 
 // ============================
