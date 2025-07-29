@@ -2,17 +2,11 @@
 #include <stdint.h>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 #include <ostream>
 #include <cassert>
 #include <memory.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-	
 	
 inline uint32_t popcount_32(uint32_t x)
 {
@@ -48,13 +42,13 @@ public:
     bitVector(uint64_t n) : _size(n)
     {
         _nchar  = (1ULL+n/64ULL);
-        _bitArray =  (uint64_t *) calloc (_nchar,sizeof(uint64_t));
+        _bitArray = new std::atomic<uint64_t>[_nchar]();
     }
 
     ~bitVector()
     {
         if(_bitArray != nullptr)
-            free(_bitArray);
+            delete[] _bitArray;
     }
 
         //copy constructor
@@ -63,8 +57,11 @@ public:
             _size =  r._size;
             _nchar = r._nchar;
             _ranks = r._ranks;
-            _bitArray = (uint64_t *) calloc (_nchar,sizeof(uint64_t));
-            memcpy(_bitArray, r._bitArray, _nchar*sizeof(uint64_t) );
+            _bitArray = new std::atomic<uint64_t>[_nchar];
+			for (size_t i = 0; i < _nchar; ++i)
+			{
+				_bitArray[i].store(r._bitArray[i].load(std::memory_order_relaxed));
+			}
         }
     
     // Copy assignment operator
@@ -75,10 +72,14 @@ public:
             _size =  r._size;
             _nchar = r._nchar;
             _ranks = r._ranks;
-            if(_bitArray != nullptr)
-                free(_bitArray);
-            _bitArray = (uint64_t *) calloc (_nchar,sizeof(uint64_t));
-            memcpy(_bitArray, r._bitArray, _nchar*sizeof(uint64_t) );
+
+			if (_bitArray != nullptr)
+				delete[] _bitArray;
+			_bitArray = new std::atomic<uint64_t>[_nchar];
+			for (size_t i = 0; i < _nchar; ++i)
+			{
+				_bitArray[i].store(r._bitArray[i].load(std::memory_order_relaxed));
+			}
         }
         return *this;
     }
@@ -90,7 +91,7 @@ public:
         if (&r != this)
         {
             if(_bitArray != nullptr)
-                free(_bitArray);
+                delete[] _bitArray;
             
             _size =  std::move (r._size);
             _nchar = std::move (r._nchar);
@@ -110,9 +111,10 @@ public:
     void resize(uint64_t newsize)
     {
         //printf("bitvector resize from  %llu bits to %llu \n",_size,newsize);
-        _nchar  = (1ULL+newsize/64ULL);
-        _bitArray = (uint64_t *) realloc(_bitArray,_nchar*sizeof(uint64_t));
-        _size = newsize;
+		_nchar  = (1ULL+newsize/64ULL);
+		delete[] _bitArray;
+		_bitArray = new std::atomic<uint64_t>[_nchar]();
+		_size = newsize;
     }
 
     size_t size() const
@@ -125,7 +127,8 @@ public:
     //clear whole array
     void clear()
     {
-        memset(_bitArray,0,_nchar*sizeof(uint64_t));
+		for (size_t i = 0; i < _nchar; ++i)
+			_bitArray[i].store(0, std::memory_order_relaxed);
     }
 
     //clear collisions in interval, only works with start and size multiple of 64
@@ -148,7 +151,11 @@ public:
     {
         assert( (start & 63) ==0);
         assert( (size & 63) ==0);
-        memset(_bitArray + (start/64ULL),0,(size/64ULL)*sizeof(uint64_t));
+        // memset(_bitArray + (start/64ULL),0,(size/64ULL)*sizeof(uint64_t));
+        for(uint64_t ii =0;  ii< (size/64ULL); ii++ )
+        {
+            _bitArray[(start/64ULL)+ii] = 0;
+        }
     }
 
     //for debug purposes
@@ -178,17 +185,11 @@ public:
         //unsigned char * _bitArray8 = (unsigned char *) _bitArray;
         //return (_bitArray8[pos >> 3ULL] >> (pos & 7 ) ) & 1;
 
-        return (_bitArray[pos >> 6ULL] >> (pos & 63 ) ) & 1;
+        return (_bitArray[pos >> 6].load(std::memory_order_relaxed) >> (pos & 63)) & 1;
 
     }
 
     //atomically   return old val and set to 1
-    // uint64_t atomic_test_and_set(uint64_t pos)
-    // {
-    // 	uint64_t oldval = 	__sync_fetch_and_or (_bitArray + (pos >> 6), (uint64_t) (1ULL << (pos & 63)) );
-
-    // 	return  ( oldval >> (pos & 63 ) ) & 1;
-    // }
     inline uint64_t atomic_test_and_set(uint64_t pos)
     {
         uint64_t mask = 1ULL << (pos & 63);
@@ -207,30 +208,19 @@ public:
 
     uint64_t get64(uint64_t cell64) const
     {
-        return _bitArray[cell64];
+        return _bitArray[cell64].load(std::memory_order_relaxed);
     }
 
     //set bit pos to 1
     void set(uint64_t pos)
     {
-        assert(pos<_size);
-        //_bitArray [pos >> 6] |=   (1ULL << (pos & 63) ) ;
-        #ifdef _WIN32
-        InterlockedOr64((volatile LONG64*)(_bitArray + (pos >> 6ULL)), (1ULL << (pos & 63)));
-        #else
-        __sync_fetch_and_or(_bitArray + (pos >> 6ULL), (1ULL << (pos & 63)));
-        #endif
+		_bitArray[pos >> 6].fetch_or(1ULL << (pos & 63), std::memory_order_relaxed);
     }
 
     //set bit pos to 0
     void reset(uint64_t pos)
     {
-        //_bitArray [pos >> 6] &=   ~(1ULL << (pos & 63) ) ;
-        #ifdef _WIN32
-        InterlockedAnd64((volatile LONG64*)(_bitArray + (pos >> 6ULL)), ~(1ULL << (pos & 63)));
-        #else
-        __sync_fetch_and_and(_bitArray + (pos >> 6ULL), ~(1ULL << (pos & 63)));
-        #endif
+		_bitArray[pos >> 6].fetch_and(~(1ULL << (pos & 63)), std::memory_order_relaxed);
     }
 
     //return value of  last rank
@@ -292,7 +282,7 @@ public:
 
 
 protected:
-    uint64_t*  _bitArray;
+    std::atomic<uint64_t>* _bitArray;
     uint64_t _size;
     uint64_t _nchar;
 

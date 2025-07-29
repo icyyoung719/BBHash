@@ -6,14 +6,14 @@
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
+    #include <io.h>
     #pragma comment(lib, "ws2_32.lib")
 #else
-    #include <unistd.h>
-    #include <pthread.h>
+	#include <stdio.h>
 #endif
 
 #include <cstdint>
-
+#include <vector>
 
 template<typename T>
 inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_t count) {
@@ -31,30 +31,3 @@ inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_
     funlockfile(file);
 #endif
 }
-
-
-// ============================
-// 原子操作
-// ============================
-#ifdef _MSC_VER
-
-inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* bitArray) {
-    uint64_t mask = (1ULL << (pos & 63));
-    uint64_t* target = bitArray + (pos >> 6);
-    uint64_t oldval;
-    do {
-        oldval = *target;
-    } while (InterlockedCompareExchange64(
-                 reinterpret_cast<volatile LONG64*>(target),
-                 oldval | mask, oldval) != oldval);
-    return (oldval >> (pos & 63)) & 1;
-}
-
-#else
-
-inline uint64_t atomic_test_and_set(uint64_t pos, uint64_t* bitArray) {
-    uint64_t oldval = __sync_fetch_and_or(bitArray + (pos >> 6), (1ULL << (pos & 63)));
-    return (oldval >> (pos & 63)) & 1;
-}
-
-#endif
