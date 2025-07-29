@@ -42,6 +42,10 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 set(SOURCES
     test_min.cpp
+    BooPHF.h
+    bitvector.hpp
+    progress.hpp
+    platform_time.h
 )
 
 # 添加可执行文件

@@ -14,12 +14,12 @@
 #endif
 	
 	
-inline unsigned int popcount_32(unsigned int x)
+inline uint32_t popcount_32(uint32_t x)
 {
-    unsigned int m1 = 0x55555555;
-    unsigned int m2 = 0x33333333;
-    unsigned int m4 = 0x0f0f0f0f;
-    unsigned int h01 = 0x01010101;
+    uint32_t m1 = 0x55555555;
+    uint32_t m2 = 0x33333333;
+    uint32_t m4 = 0x0f0f0f0f;
+    uint32_t h01 = 0x01010101;
     x -= (x >> 1) & m1;               /* put count of each 2 bits into those 2 bits */
     x = (x & m2) + ((x >> 2) & m2);   /* put count of each 4 bits in */
     x = (x + (x >> 4)) & m4;          /* put count of each 8 bits in partie droite  4bit piece*/
@@ -27,10 +27,10 @@ inline unsigned int popcount_32(unsigned int x)
 }
 
 
-inline unsigned int popcount_64(uint64_t x)
+inline uint64_t popcount_64(uint64_t x)
 {
-    unsigned int low = x & 0xffffffff ;
-    unsigned int high = ( x >> 32LL) & 0xffffffff ;
+    uint32_t low = x & 0xffffffff ;
+    uint32_t high = ( x >> 32LL) & 0xffffffff ;
 
     return (popcount_32(low) + popcount_32(high));
 }
@@ -154,22 +154,22 @@ public:
     //for debug purposes
     void print() const
     {
-        printf("bit array of size %lli: \n",(long long int)_size);
-        for(uint64_t ii = 0; ii< _size; ii++)
+        std::cout << "bit array of size " << _size << " : " << std::endl;
+        for(auto ii = 0; ii< _size; ii++)
         {
             if(ii%10==0)
-                printf(" (%llu) ",(long long unsigned int)ii);
-            int val = (_bitArray[ii >> 6] >> (ii & 63 ) ) & 1;
-            printf("%i",val);
+                std::cout << " (" << ii << ") ";
+            auto val = (_bitArray[ii >> 6] >> (ii & 63 ) ) & 1;
+            std::cout << val;
         }
-        printf("\n");
+        std::cout << std::endl;
 
-        printf("rank array : size %zu \n",_ranks.size());
-        for (uint64_t ii = 0; ii< _ranks.size(); ii++)
+        std::cout << "rank array : size " << _ranks.size() << std::endl;
+        for (auto ii = 0; ii< _ranks.size(); ii++)
         {
-            printf("%llu :  %lli,  ",(long long unsigned int)ii,(long long int)_ranks[ii]);
+            std::cout << ii << " :  " << _ranks[ii] << " , ";
         }
-        printf("\n");
+        std::cout << std::endl;
     }
 
     //return value at pos
