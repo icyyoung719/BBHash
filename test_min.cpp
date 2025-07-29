@@ -5,6 +5,8 @@
 #include <string>
 #include <unordered_set>
 #include <cstdint>
+#include <cassert>
+#include <algorithm>
 #include "BooPHF.h"
 
 int main() {
@@ -41,26 +43,11 @@ int main() {
     }
 
     std::vector<uint64_t> input_keys(key_set.begin(), key_set.end());
+    std::sort(input_keys.begin(), input_keys.end());
 
     // 构建 BooPHF
     using boophf_t = boomphf::mphf<uint64_t, boomphf::SingleHashFunctor<uint64_t>>;
     boophf_t bphf(input_keys.size(), input_keys, 1, 1, false);
-
-    // 查询每个 key 的索引
-    int i = 0;
-    std::string queryOut = R"(C:\Users\Administrator\Desktop\BBHash\BBHash\query.csv)";
-    std::ofstream queryFile(queryOut);
-
-    for (const auto& key : input_keys) {
-        i++;
-        if (i >= 100)
-            break;
-        uint64_t idx = bphf.lookup(key);
-        queryFile << idx << "," << key << "\n";
-        // std::cout << "Key: " << key << " -> Index: " << idx << "\n";
-        // assert (idx < input_keys.size());
-        assert (idx < input_keys.size());
-    }
 
 	// std::ofstream os("example.mphf", std::ios::binary);
 	// bphf.save(os);
@@ -74,7 +61,6 @@ int main() {
     // TEST query
     for (const auto& key : input_keys) {
         uint64_t idx = bphf_load->lookup(key);
-        // std::cout << "Key: " << key << " -> Index: " << idx << "\n";
         assert (idx < input_keys.size());
         assert(idx == bphf.lookup(key));
     }
