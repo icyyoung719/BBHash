@@ -139,7 +139,7 @@ namespace boomphf {
 			}
 		}
 
-		    file_binary(const std::string& filename)
+			file_binary(const std::string& filename)
 				: file_binary(filename.c_str())
 			{}
 
@@ -192,9 +192,9 @@ namespace boomphf {
 		}
 
 		//return one hash
-        uint64_t operator ()  (const Item& key, size_t idx)  const {  return hash64 (key, _seed_tab[idx]);  }
+		uint64_t operator ()  (const Item& key, size_t idx)  const {  return hash64 (key, _seed_tab[idx]);  }
 
-        uint64_t hashWithSeed(const Item& key, uint64_t seed)  const {  return hash64 (key, seed);  }
+		uint64_t hashWithSeed(const Item& key, uint64_t seed)  const {  return hash64 (key, seed);  }
 
 		//this one returns all the 7 hashes
 		//maybe use xorshift instead, for faster hash compute
@@ -253,8 +253,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 (rayan)
 */
 
-    // wrapper around HashFunctors to return only one value instead of 7
-    template <typename Item> class SingleHashFunctor
+	// wrapper around HashFunctors to return only one value instead of 7
+	template <typename Item> class SingleHashFunctor
 	{
 	public:
 		uint64_t operator ()  (const Item& key, uint64_t seed=0xAAAAAAAA55555555ULL) const  {  return hashFunctors.hashWithSeed(key, seed);  }
@@ -265,36 +265,36 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 
 
-    template <typename Item, class SingleHasher_t> class XorshiftHashFunctors
-    {
-        /*  Xorshift128*
-            Written in 2014 by Sebastiano Vigna (vigna@acm.org)
+	template <typename Item, class SingleHasher_t> class XorshiftHashFunctors
+	{
+		/*  Xorshift128*
+			Written in 2014 by Sebastiano Vigna (vigna@acm.org)
 
-            To the extent possible under law, the author has dedicated all copyright
-            and related and neighboring rights to this software to the public domain
-            worldwide. This software is distributed without any warranty.
+			To the extent possible under law, the author has dedicated all copyright
+			and related and neighboring rights to this software to the public domain
+			worldwide. This software is distributed without any warranty.
 
-            See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-        /* This is the fastest generator passing BigCrush without
-           systematic failures, but due to the relatively short period it is
-           acceptable only for applications with a mild amount of parallelism;
-           otherwise, use a xorshift1024* generator.
+			See <http://creativecommons.org/publicdomain/zero/1.0/>. */
+		/* This is the fastest generator passing BigCrush without
+		   systematic failures, but due to the relatively short period it is
+		   acceptable only for applications with a mild amount of parallelism;
+		   otherwise, use a xorshift1024* generator.
 
-           The state must be seeded so that it is not everywhere zero. If you have
-           a nonzero 64-bit seed, we suggest to pass it twice through
-           MurmurHash3's avalanching function. */
+		   The state must be seeded so that it is not everywhere zero. If you have
+		   a nonzero 64-bit seed, we suggest to pass it twice through
+		   MurmurHash3's avalanching function. */
 
-      //  uint64_t s[ 2 ];
+	  //  uint64_t s[ 2 ];
 
-        uint64_t next(uint64_t * s) {
-            uint64_t s1 = s[ 0 ];
-            const uint64_t s0 = s[ 1 ];
-            s[ 0 ] = s0;
-            s1 ^= s1 << 23; // a
-            return ( s[ 1 ] = ( s1 ^ s0 ^ ( s1 >> 17 ) ^ ( s0 >> 26 ) ) ) + s0; // b, c
-        }
+		uint64_t next(uint64_t * s) {
+			uint64_t s1 = s[ 0 ];
+			const uint64_t s0 = s[ 1 ];
+			s[ 0 ] = s0;
+			s1 ^= s1 << 23; // a
+			return ( s[ 1 ] = ( s1 ^ s0 ^ ( s1 >> 17 ) ^ ( s0 >> 26 ) ) ) + s0; // b, c
+		}
 
-        public:
+		public:
 
 
 		uint64_t h0(hash_pair_t  & s, const Item& key )
@@ -319,29 +319,29 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 			return ( s[ 1 ] = ( s1 ^ s0 ^ ( s1 >> 17 ) ^ ( s0 >> 26 ) ) ) + s0; // b, c
 		}
 
-        //this one returns all the  hashes
-        hash_set_t operator ()  (const Item& key)
-        {
+		//this one returns all the  hashes
+		hash_set_t operator ()  (const Item& key)
+		{
 			uint64_t s[ 2 ];
 
-            hash_set_t   hset;
+			hash_set_t   hset;
 
-            hset[0] =  singleHasher (key, 0xAAAAAAAA55555555ULL);
-            hset[1] =  singleHasher (key, 0x33333333CCCCCCCCULL);
+			hset[0] =  singleHasher (key, 0xAAAAAAAA55555555ULL);
+			hset[1] =  singleHasher (key, 0x33333333CCCCCCCCULL);
 
-            s[0] = hset[0];
-            s[1] = hset[1];
+			s[0] = hset[0];
+			s[1] = hset[1];
 
-            for(size_t ii=2;ii< 10 /* it's much better have a constant here, for inlining; this loop is super performance critical*/; ii++)
-            {
-                hset[ii] = next(s);
-            }
+			for(size_t ii=2;ii< 10 /* it's much better have a constant here, for inlining; this loop is super performance critical*/; ii++)
+			{
+				hset[ii] = next(s);
+			}
 
-            return hset;
-        }
-    private:
-        SingleHasher_t singleHasher;
-    };
+			return hset;
+		}
+	private:
+		SingleHasher_t singleHasher;
+	};
 
 
 ////////////////////////////////////////////////////////////////
@@ -435,13 +435,13 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 	void thread_processLevel(thread_args<Range, it_type> *targ);
 
 	/* Hasher_t returns a single hash when operator()(elem_t key) is called.
-       if used with XorshiftHashFunctors, it must have the following operator: operator()(elem_t key, uint64_t seed) */
-    template <typename elem_t, typename Hasher_t>
+	   if used with XorshiftHashFunctors, it must have the following operator: operator()(elem_t key, uint64_t seed) */
+	template <typename elem_t, typename Hasher_t>
 	class mphf {
 
-        /* this mechanisms gets P hashes out of Hasher_t */
-        typedef XorshiftHashFunctors<elem_t,Hasher_t> MultiHasher_t ;
-       // typedef HashFunctors<elem_t> MultiHasher_t; // original code (but only works for int64 keys)  (seems to be as fast as the current xorshift)
+		/* this mechanisms gets P hashes out of Hasher_t */
+		typedef XorshiftHashFunctors<elem_t,Hasher_t> MultiHasher_t ;
+	   // typedef HashFunctors<elem_t> MultiHasher_t; // original code (but only works for int64 keys)  (seems to be as fast as the current xorshift)
 		//typedef IndepHashFunctors<elem_t,Hasher_t> MultiHasher_t; //faster than xorshift
 
 	public:
@@ -576,8 +576,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 		uint64_t nbKeys() const
 		{
-            return _nelem;
-        }
+			return _nelem;
+		}
 
 		uint64_t totalBitSize()
 		{
@@ -599,7 +599,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		}
 
 		template <typename Iterator>  //typename Range,
-        void pthread_processLevel( std::vector<elem_t>  & buffer , std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
+		void pthread_processLevel( std::vector<elem_t>  & buffer , std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
 		{
 			uint64_t nb_done =0;
 			int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
@@ -626,7 +626,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 				//do work on the n elems of the buffer
 			//	printf("filling input  buff \n");
 
-                for(uint64_t ii=0; ii<inbuff ; ii++)
+				for(uint64_t ii=0; ii<inbuff ; ii++)
 				{
 					elem_t val = buffer[ii];
 					//printf("processing %llu  level %i\n",val, i);
@@ -1071,13 +1071,13 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		//level ** _levels;
 		std::vector<level> _levels;
 		uint32_t _nb_levels;
-        MultiHasher_t _hasher;
+		MultiHasher_t _hasher;
 		bitVector * _tempBitset;
 
 		double _gamma;
 		uint64_t _hash_domain;
 		uint64_t _nelem;
-        std::unordered_map<elem_t,uint64_t,Hasher_t> _final_hash;
+		std::unordered_map<elem_t,uint64_t,Hasher_t> _final_hash;
 		Progress _progressBar;
 		std::atomic<uint32_t> _nb_living{0};
 		uint32_t _num_thread;
