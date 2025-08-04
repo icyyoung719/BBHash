@@ -3,6 +3,7 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <atomic>
 #include <ostream>
 #include <cassert>
 #include <memory.h>

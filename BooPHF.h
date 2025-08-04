@@ -380,13 +380,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 	
 	static inline uint64_t fastrange64(uint64_t word, uint64_t p) {
-		//return word %  p;
-	#ifdef _MSC_VER
-		// MSVC 无 __uint128_t，退回普通取模
-		return word % p;
-	#else
-		return (uint64_t)(((__uint128_t)word * (__uint128_t)p) >> 64);
-	#endif
+		return word %  p;
 	}
 	
 	class level{
