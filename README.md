@@ -1,5 +1,23 @@
 [![Build Status](https://travis-ci.org/rizkg/BBHash.svg?branch=master)](https://travis-ci.org/rizkg/BBHash)
 
+# Cross-Platform Changes
+[BBhash](https://github.com/rizkg/BBHash) is not cross-platform. It only compiles and works on Linux. So I have forked it and made it cross-platform.
+
+Now this fork can compile on Windows (both x86 and x64) and Linux (x64, have not tested on x86).
+
+This is a simple description of the build process:
+
+1. Read raw data from a file with consistent (platform-independent) order (e.g., avoid using unordered_set). As long as the key order is consistent, the generated mphf will be the same across platforms.
+2. Build BBhash and output .mphf file
+3. Query BBhash (from building raw or loading mphf file) with a key
+
+Cross-Platform ensures two things:
+1. The mphf files are all the same on multiple platforms
+2. The mphf files can be loaded on both platforms
+
+So you can build mphf on one platform, and load/query mphf on **ANY** other platform.
+
+
 # BBHash
 BBHash is a simple library for building minimal perfect hash function.
 It is designed to handle large scale datasets. The function is just a little bit larger than other state-of-the-art libraries, it takes approximately 3 bits / elements (compared to 2.62 bits/elem for the emphf lib), but construction is faster and does not require additional memory. 
