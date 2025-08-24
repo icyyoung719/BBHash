@@ -35,11 +35,7 @@ class bitVector {
 
 public:
 
-	bitVector() : _size(0)
-	{
-		_bitArray = nullptr;
-	}
-
+	bitVector() = default;
 	bitVector(uint64_t n) : _size(n)
 	{
 		_nchar  = (1ULL+n/64ULL);
@@ -283,8 +279,8 @@ public:
 
 
 protected:
-	std::atomic<uint64_t>* _bitArray;
-	uint64_t _size;
+	std::atomic<uint64_t>* _bitArray = nullptr;
+	uint64_t _size = 0;
 	uint64_t _nchar;
 
 		// epsilon =  64 / _nb_bits_per_rank_sample   bits

@@ -257,7 +257,10 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 	template <typename Item> class SingleHashFunctor
 	{
 	public:
-		uint64_t operator ()  (const Item& key, uint64_t seed=0xAAAAAAAA55555555ULL) const  {  return hashFunctors.hashWithSeed(key, seed);  }
+		uint64_t operator () (const Item& key, uint64_t seed=0xAAAAAAAA55555555ULL) const
+		{
+			return hashFunctors.hashWithSeed(key, seed);
+		}
 
 	private:
 		HashFunctors<Item> hashFunctors;
@@ -267,6 +270,10 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 	template <typename Item, class SingleHasher_t> class XorshiftHashFunctors
 	{
+		static_assert(
+			std::is_invocable_r_v<uint64_t, const SingleHasher_t&, const Item&, uint64_t>,
+			"SingleHasher_t::operator()(const Item&, uint64_t) must be const and return uint64_t"
+		);
 		/*  Xorshift128*
 			Written in 2014 by Sebastiano Vigna (vigna@acm.org)
 
@@ -286,7 +293,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 	  //  uint64_t s[ 2 ];
 
-		uint64_t next(uint64_t * s) {
+		uint64_t next(uint64_t * s) const
+		{
 			uint64_t s1 = s[ 0 ];
 			const uint64_t s0 = s[ 1 ];
 			s[ 0 ] = s0;
@@ -297,13 +305,13 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		public:
 
 
-		uint64_t h0(hash_pair_t  & s, const Item& key )
+		uint64_t h0(hash_pair_t  & s, const Item& key ) const
 		{
 			s[0] =  singleHasher (key, 0xAAAAAAAA55555555ULL);
 			return s[0];
 		}
 
-		uint64_t h1(hash_pair_t  & s, const Item& key )
+		uint64_t h1(hash_pair_t  & s, const Item& key ) const
 		{
 			s[1] =  singleHasher (key, 0x33333333CCCCCCCCULL);
 			return s[1];
@@ -311,7 +319,8 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 
 		//return next hash an update state s
-		uint64_t next(hash_pair_t  & s ) {
+		uint64_t next(hash_pair_t  & s ) const
+		{
 			uint64_t s1 = s[ 0 ];
 			const uint64_t s0 = s[ 1 ];
 			s[ 0 ] = s0;
@@ -320,7 +329,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		}
 
 		//this one returns all the  hashes
-		hash_set_t operator ()  (const Item& key)
+		hash_set_t operator () (const Item& key) const
 		{
 			uint64_t s[ 2 ];
 
@@ -379,18 +388,18 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 ////////////////////////////////////////////////////////////////
 
 	
-	static inline uint64_t fastrange64(uint64_t word, uint64_t p) {
+	inline uint64_t fastrange64(const uint64_t word,const uint64_t p)
+	{
+		// todo: Use compile-time optimizations
 		return word %  p;
 	}
 	
 	class level{
 	public:
-		level(){ }
+		level() = default;
+		~level() = default;
 
-		~level() {
-		}
-
-		uint64_t get(uint64_t hash_raw)
+		uint64_t get(uint64_t hash_raw) const
 		{
 		//	uint64_t hashi =    hash_raw %  hash_domain; //
 			//uint64_t hashi = (uint64_t)(  ((__uint128_t) hash_raw * (__uint128_t) hash_domain) >> 64ULL);
@@ -400,7 +409,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		
 		uint64_t idx_begin;
 		uint64_t hash_domain;
-		bitVector  bitset;
+		bitVector bitset;
 	};
 
 
@@ -528,7 +537,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 		}
 
 
-		uint64_t lookup(const elem_t &elem)
+		uint64_t lookup(const elem_t &elem) const
 		{
 			if(! _built) return ULLONG_MAX;
 			
@@ -865,7 +874,7 @@ we need this 2-functors scheme because HashFunctors won't work with unordered_ma
 
 
 		//compute level and returns hash of last level reached
-		uint64_t getLevel(hash_pair_t & bbhash, const elem_t &val, int * res_level, int maxlevel = 100, int minlevel =0)
+		uint64_t getLevel(hash_pair_t & bbhash, const elem_t &val, int * res_level, int maxlevel = 100, int minlevel =0) const
 		//uint64_t getLevel(hash_pair_t & bbhash, elem_t val,int * res_level, int maxlevel = 100, int minlevel =0)
 
 		{
