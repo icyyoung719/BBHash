@@ -4,19 +4,20 @@
 // 平台判断
 // ============================
 #ifdef _WIN32
-	#define WIN32_LEAN_AND_MEAN
-	#include <windows.h>
-	#include <io.h>
-	#pragma comment(lib, "ws2_32.lib")
+#define WIN32_LEAN_AND_MEAN
+#include <io.h>
+#include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
-	#include <stdio.h>
+#include <stdio.h>
 #endif
 
 #include <cstdint>
 #include <vector>
 
-template<typename T>
-inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_t count) {
+template <typename T>
+inline void write_with_file_lock(FILE* file, const std::vector<T>& buffer, size_t count)
+{
 #ifdef _WIN32
 	OVERLAPPED ol = {0};
 	HANDLE fileHandle = (HANDLE)_get_osfhandle(_fileno(file));

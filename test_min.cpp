@@ -1,71 +1,79 @@
-﻿#include <iostream>
+﻿#include "BooPHF.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <fstream>
+#include <iostream>
 #include <sstream>
-#include <vector>
 #include <string>
 #include <unordered_set>
-#include <cstdint>
-#include <cassert>
-#include <algorithm>
-#include "BooPHF.h"
+#include <vector>
 
-int main() {
-    std::ifstream infile("C:\\Users\\Administrator\\Desktop\\BBHash\\BBHash\\converted_m2.csv");
-    if (!infile) {
-        std::cerr << "Failed to open file.\n";
-        return 1;
-    }
+int main()
+{
+	std::ifstream infile("C:\\Users\\Administrator\\Desktop\\BBHash\\BBHash\\converted_m2.csv");
+	if (!infile)
+	{
+		std::cerr << "Failed to open file.\n";
+		return 1;
+	}
 
-    std::unordered_set<uint64_t> key_set; // 去重
-    std::string line;
-    std::getline(infile, line); // 跳过表头
+	std::unordered_set<uint64_t> key_set; // 去重
+	std::string line;
+	std::getline(infile, line); // 跳过表头
 
-    int max_num = 1000000; // 限制读取的行数
-    int counter = 0;
-    while (std::getline(infile, line)) {
-        if (counter >= max_num) break;
-        counter++;
-        std::istringstream iss(line);
-        std::string prev_str, next_str, val_str;
+	int max_num = 1000000; // 限制读取的行数
+	int counter = 0;
+	while (std::getline(infile, line))
+	{
+		if (counter >= max_num)
+			break;
+		counter++;
+		std::istringstream iss(line);
+		std::string prev_str, next_str, val_str;
 
-        if (!std::getline(iss, prev_str, ',')) continue;
-        if (!std::getline(iss, next_str, ',')) continue;
-        // 忽略 value
-        if (!std::getline(iss, val_str, ',')) continue;
+		if (!std::getline(iss, prev_str, ','))
+			continue;
+		if (!std::getline(iss, next_str, ','))
+			continue;
+		// 忽略 value
+		if (!std::getline(iss, val_str, ','))
+			continue;
 
-        int32_t prev = std::stoi(prev_str);
-        int32_t next = std::stoi(next_str);
+		int32_t prev = std::stoi(prev_str);
+		int32_t next = std::stoi(next_str);
 
-        uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(prev)) << 32) |
-                        static_cast<uint32_t>(next);
+		uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(prev)) << 32) |
+		               static_cast<uint32_t>(next);
 
-        key_set.insert(key); // 去重插入
-    }
+		key_set.insert(key); // 去重插入
+	}
 
-    std::vector<uint64_t> input_keys(key_set.begin(), key_set.end());
-    std::sort(input_keys.begin(), input_keys.end());
+	std::vector<uint64_t> input_keys(key_set.begin(), key_set.end());
+	std::sort(input_keys.begin(), input_keys.end());
 
-    // 构建 BooPHF
-    using boophf_t = boomphf::mphf<uint64_t, boomphf::SingleHashFunctor<uint64_t>>;
-    boophf_t bphf(input_keys.size(), input_keys, 1, 1, false);
+	// 构建 BooPHF
+	using boophf_t = boomphf::mphf<uint64_t, boomphf::SingleHashFunctor<uint64_t>>;
+	boophf_t bphf(input_keys.size(), input_keys, 1, 1, false);
 
 	// std::ofstream os("example.mphf", std::ios::binary);
 	// bphf.save(os);
 
-    // os.flush();
+	// os.flush();
 
 	boophf_t* bphf_load = new boophf_t;
 	std::ifstream is("example.mphf", std::ios::binary);
 	bphf_load->load(is);
 
-    // TEST query
-    for (const auto& key : input_keys) {
-        uint64_t idx = bphf_load->lookup(key);
-        assert (idx < input_keys.size());
-        assert(idx == bphf.lookup(key));
-    }
+	// TEST query
+	for (const auto& key : input_keys)
+	{
+		uint64_t idx = bphf_load->lookup(key);
+		assert(idx < input_keys.size());
+		assert(idx == bphf.lookup(key));
+	}
 
-    std::cout << "All tests passed.\n";
+	std::cout << "All tests passed.\n";
 
-    return 0;
+	return 0;
 }
