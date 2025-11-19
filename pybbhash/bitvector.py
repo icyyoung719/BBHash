@@ -92,31 +92,48 @@ class bitvector:
         r += popcount64(self._bitArray[word_idx] & mask)
         return r
 
-    # save/load simple binary interface (optional)
-    def save(self, f):
-        # write size and words as little-endian ints
+    # save/load binary interface compatible with C++
+    def save(self, os):
+        """Save to binary stream (file opened in 'wb' mode).
+        Compatible with C++ bitVector::save format."""
         import struct
-        f.write(struct.pack("<Q", self._size))
-        f.write(struct.pack("<Q", self._nchar))
+        # Write _size (uint64_t)
+        os.write(struct.pack("<Q", self._size))
+        # Write _nchar (uint64_t)
+        os.write(struct.pack("<Q", self._nchar))
+        # Write _bitArray (array of uint64_t)
         for w in self._bitArray:
-            f.write(struct.pack("<Q", w & ((1 << 64) - 1)))
-        f.write(struct.pack("<Q", len(self._ranks)))
+            os.write(struct.pack("<Q", w & ((1 << 64) - 1)))
+        # Write ranks size (uint64_t)
+        os.write(struct.pack("<Q", len(self._ranks)))
+        # Write _ranks (array of uint64_t)
         for r in self._ranks:
-            f.write(struct.pack("<Q", r))
+            os.write(struct.pack("<Q", r))
 
-    def load(self, f):
+    @staticmethod
+    def load(is_stream):
+        """Load from binary stream (file opened in 'rb' mode).
+        Compatible with C++ bitVector::load format.
+        Returns a new bitvector instance."""
         import struct
-        data = f.read(8 * 2)
+        bv = bitvector(0)
+        # Read _size (uint64_t)
+        data = is_stream.read(8)
         if not data:
-            return
-        self._size, self._nchar = struct.unpack("<QQ", data)
-        self._bitArray = []
-        for _ in range(self._nchar):
-            wdata = f.read(8)
-            (w,) = struct.unpack("<Q", wdata)
-            self._bitArray.append(w)
-        (sizer,) = struct.unpack("<Q", f.read(8))
-        self._ranks = []
+            return bv
+        bv._size = struct.unpack("<Q", data)[0]
+        # Read _nchar (uint64_t)
+        bv._nchar = struct.unpack("<Q", is_stream.read(8))[0]
+        # Read _bitArray
+        bv._bitArray = []
+        for _ in range(bv._nchar):
+            w = struct.unpack("<Q", is_stream.read(8))[0]
+            bv._bitArray.append(w)
+        # Read ranks size
+        sizer = struct.unpack("<Q", is_stream.read(8))[0]
+        # Read _ranks
+        bv._ranks = []
         for _ in range(sizer):
-            (r,) = struct.unpack("<Q", f.read(8))
-            self._ranks.append(r)
+            r = struct.unpack("<Q", is_stream.read(8))[0]
+            bv._ranks.append(r)
+        return bv

@@ -173,12 +173,85 @@ class mphf:
         return totalsize
 
     def save(self, fpath: str):
-        import pickle
-        with open(fpath, "wb") as f:
-            pickle.dump(self, f)
+        """Save mphf to binary file compatible with C++ format."""
+        import struct
+        with open(fpath, "wb") as os:
+            # Write _gamma (double, 8 bytes)
+            os.write(struct.pack("<d", self._gamma))
+            # Write _nb_levels (uint32_t, 4 bytes)
+            os.write(struct.pack("<I", self._nb_levels))
+            # Write _lastbitsetrank (uint64_t, 8 bytes)
+            os.write(struct.pack("<Q", self._lastbitsetrank))
+            # Write _nelem (uint64_t, 8 bytes)
+            os.write(struct.pack("<Q", self._nelem))
+            
+            # Save each level's bitset
+            for ii in range(self._nb_levels):
+                self._levels[ii].bitset.save(os)
+            
+            # Save final hash
+            final_hash_size = len(self._final_hash)
+            os.write(struct.pack("<Q", final_hash_size))
+            
+            for key, value in self._final_hash.items():
+                # Write key (int/uint64_t, 8 bytes)
+                os.write(struct.pack("<Q", key))
+                # Write value (uint64_t, 8 bytes)
+                os.write(struct.pack("<Q", value))
 
     @staticmethod
     def load(fpath: str):
-        import pickle
-        with open(fpath, "rb") as f:
-            return pickle.load(f)
+        """Load mphf from binary file compatible with C++ format."""
+        import struct
+        mph = mphf()
+        
+        with open(fpath, "rb") as is_stream:
+            # Read _gamma (double)
+            mph._gamma = struct.unpack("<d", is_stream.read(8))[0]
+            # Read _nb_levels (uint32_t)
+            mph._nb_levels = struct.unpack("<I", is_stream.read(4))[0]
+            # Read _lastbitsetrank (uint64_t)
+            mph._lastbitsetrank = struct.unpack("<Q", is_stream.read(8))[0]
+            # Read _nelem (uint64_t)
+            mph._nelem = struct.unpack("<Q", is_stream.read(8))[0]
+            
+            # Load each level's bitset
+            mph._levels = []
+            for ii in range(mph._nb_levels):
+                lv = level()
+                lv.bitset = bitvector.load(is_stream)
+                mph._levels.append(lv)
+            
+            # Mini setup: recompute size of each level (same as C++)
+            mph._proba_collision = 1.0 - pow(((mph._gamma * float(mph._nelem) - 1) / (mph._gamma * float(mph._nelem))), max(1, mph._nelem - 1))
+            previous_idx = 0
+            mph._hash_domain = int(math.ceil(float(mph._nelem) * mph._gamma))
+            
+            for ii in range(mph._nb_levels):
+                mph._levels[ii].idx_begin = previous_idx
+                hd = int(math.ceil(mph._hash_domain * pow(mph._proba_collision, ii)))
+                hd = ((hd + 63) // 64) * 64
+                if hd == 0:
+                    hd = 64
+                mph._levels[ii].hash_domain = hd
+                previous_idx += hd
+            
+            # Restore final hash
+            mph._final_hash = {}
+            final_hash_size = struct.unpack("<Q", is_stream.read(8))[0]
+            
+            for ii in range(final_hash_size):
+                # Read key (uint64_t)
+                key = struct.unpack("<Q", is_stream.read(8))[0]
+                # Read value (uint64_t)
+                value = struct.unpack("<Q", is_stream.read(8))[0]
+                mph._final_hash[key] = value
+            
+            mph._built = True
+            mph._hasher = XorshiftHashFunctors(SingleHashFunctor())
+            mph._num_thread = 1
+            mph._fastmode = False
+            mph._withprogress = False
+            mph._writeEachLevel = False
+        
+        return mph
