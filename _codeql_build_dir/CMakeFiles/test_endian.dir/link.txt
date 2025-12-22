@@ -1,0 +1,1 @@
+/home/runner/work/BBHash/.codeql-scratch/dbs/cpp/working/autobuild/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_endian.dir/link.d CMakeFiles/test_endian.dir/tests/test_endian.cpp.o -o test_endian  -lpthread
