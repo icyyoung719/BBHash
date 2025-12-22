@@ -1,1 +1,0 @@
-/home/runner/work/BBHash/.codeql-scratch/dbs/cpp/working/autobuild/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/example_custom_hash.dir/link.d CMakeFiles/example_custom_hash.dir/examples/example_custom_hash.cpp.o -o example_custom_hash  -lpthread
