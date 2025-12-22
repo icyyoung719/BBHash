@@ -449,513 +449,393 @@ public:
         return totalsize;
     }
 
-	template <typename Iterator> // typename Range,
-	void pthread_processLevel(std::vector<elem_t>& buffer, std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
-	{
-		uint64_t nb_done = 0;
-		int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
-		auto until = *until_p;
-		uint64_t inbuff = 0;
-
-		uint64_t writebuff = 0;
-		std::vector<elem_t>& myWriteBuff = bufferperThread[tid];
-
-		for (bool isRunning = true; isRunning;)
-		{
-
-			// safely copy n items into buffer
-			{
-				std::lock_guard<std::mutex> lock(_mutex);
-				for (; inbuff < NBBUFF && (*shared_it) != until; ++(*shared_it))
-				{
-					buffer[inbuff] = *(*shared_it);
-					inbuff++;
-				}
-				if ((*shared_it) == until)
-					isRunning = false;
-			}
-
-			// do work on the n elems of the buffer
-			//	printf("filling input  buff \n");
-
-			for (uint64_t ii = 0; ii < inbuff; ii++)
-			{
-				elem_t val = buffer[ii];
-				// printf("processing %llu  level %i\n",val, i);
-
-				// auto hashes = _hasher(val);
-				hash_pair_t bbhash;
-				int level;
-				uint64_t level_hash;
-				if (_writeEachLevel)
-					getLevel(bbhash, val, &level, i, i - 1);
-				else
-					getLevel(bbhash, val, &level, i);
-
-				// uint64_t level_hash = getLevel(bbhash,val,&level, i);
-
-				//__sync_fetch_and_add(& _cptTotalProcessed,1);
-
-				if (level == i) // insert into lvl i
-				{
-
-					//	__sync_fetch_and_add(& _cptLevel,1);
-
-					if (_fastmode && i == _fastModeLevel)
-					{
-
-						int idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
-						// si depasse taille attendue pour setLevelFastmode, fall back sur slow mode mais devrait pas arriver si hash ok et proba avec nous
-						if (idxl2 >= setLevelFastmode.size())
-							_fastmode = false;
-						else
-							setLevelFastmode[idxl2] = val; // create set for fast mode
-					}
-
-					// insert to level i+1 : either next level of the cascade or final hash if last level reached
-					if (i == _nb_levels - 1) // stop cascade here, insert into exact hash
-					{
-						uint64_t hashidx = _hashidx.fetch_add(1, std::memory_order_relaxed);
-
-						std::lock_guard<std::mutex> lock(_mutex);
-						// calc rank de fin  precedent level qq part, puis init hashidx avec ce rank, direct minimal, pas besoin inser ds bitset et rank
-						_final_hash[val] = hashidx;
-					}
-					else
-					{
-
-						// ils ont reach ce level
-						// insert elem into curr level on disk --> sera utilise au level+1 , (mais encore besoin filtre)
-
-						if (_writeEachLevel && i > 0 && i < _nb_levels - 1)
-						{
-							if (writebuff >= NBBUFF)
-							{
-								write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
-							}
-
-							// myWriteBuff[writebuff++] = val;
-							// myWriteBuff = 0;
-						}
-
-						// computes next hash
-
-						if (level == 0)
-							level_hash = _hasher.h0(bbhash, val);
-						else if (level == 1)
-							level_hash = _hasher.h1(bbhash, val);
-						else
-						{
-							level_hash = _hasher.next(bbhash);
-						}
-						insertIntoLevel(level_hash, i); // should be safe
-					}
-				}
-
-				nb_done++;
-				if ((nb_done & 1023) == 0 && _withprogress)
-				{
-					_progressBar.inc(nb_done, tid);
-					nb_done = 0;
-				}
-			}
-
-			inbuff = 0;
-		}
-
-		if (_writeEachLevel && writebuff > 0)
-		{
-			write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
-
-			writebuff = 0;
-		}
-	}
-
-	void save(std::ostream& os) const
-	{
-		boomphf::write_le(os, _gamma);
-		boomphf::write_le(os, _nb_levels);
-		boomphf::write_le(os, _lastbitsetrank);
-		boomphf::write_le(os, _nelem);
-		
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			_levels[ii].bitset.save(os);
-		}
-
-		// save final hash
-		uint64_t final_hash_size = _final_hash.size();
-		boomphf::write_le(os, final_hash_size);
-
-		// typename std::unordered_map<elem_t,uint64_t,Hasher_t>::iterator
-		for (auto it = _final_hash.begin(); it != _final_hash.end(); ++it)
-		{
-			elem_t key = it->first;
-			uint64_t value = it->second;
-			boomphf::write_le(os, key);
-			boomphf::write_le(os, value);
-		}
-	}
-
-	void load(std::istream& is)
-	{
-		boomphf::read_le(is, _gamma);
-		boomphf::read_le(is, _nb_levels);
-		boomphf::read_le(is, _lastbitsetrank);
-		boomphf::read_le(is, _nelem);
-
-		_levels.resize(_nb_levels);
-
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			//_levels[ii].bitset = new bitVector();
-			_levels[ii].bitset.load(is);
-		}
-
-		// mini setup, recompute size of each level
-		_proba_collision = 1.0 - pow(((_gamma * (double)_nelem - 1) / (_gamma * (double)_nelem)), _nelem - 1);
-		uint64_t previous_idx = 0;
-		_hash_domain = (uint64_t)(ceil(double(_nelem) * _gamma));
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			//_levels[ii] = new level();
-			_levels[ii].idx_begin = previous_idx;
-			_levels[ii].hash_domain = (((uint64_t)(_hash_domain * pow(_proba_collision, ii)) + 63) / 64) * 64;
-			if (_levels[ii].hash_domain == 0)
-				_levels[ii].hash_domain = 64;
-			previous_idx += _levels[ii].hash_domain;
-		}
-
-		// restore final hash
-
-		_final_hash.clear();
-		uint64_t final_hash_size;
-
-		boomphf::read_le(is, final_hash_size);
-
-		for (uint64_t ii = 0; ii < final_hash_size; ii++)
-		{
-			elem_t key;
-			uint64_t value;
-
-			boomphf::read_le(is, key);
-			boomphf::read_le(is, value);
-
-			_final_hash[key] = value;
-		}
-		_built = true;
-	}
-
-  private:
-	void setup()
-	{
-		uint64_t tid_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
-		_pid = static_cast<int>(tid_hash);
-		// printf("pt self %llu  pid %i \n",printPt(pthread_self()),_pid);
-
-		_cptTotalProcessed = 0;
-
-		if (_fastmode)
-		{
-			setLevelFastmode.resize(_percent_elem_loaded_for_fastMode * (double)_nelem);
-		}
-
-		bufferperThread.resize(_num_thread);
-		if (_writeEachLevel)
-		{
-			for (uint32_t ii = 0; ii < _num_thread; ii++)
-			{
-				bufferperThread[ii].resize(NBBUFF);
-			}
-		}
-
-		_proba_collision = 1.0 - pow(((_gamma * (double)_nelem - 1) / (_gamma * (double)_nelem)), _nelem - 1);
-
-		double sum_geom = _gamma * (1.0 + _proba_collision / (1.0 - _proba_collision));
-		// printf("proba collision %f  sum_geom  %f   \n",_proba_collision,sum_geom);
-
-		_nb_levels = 25;
-		_levels.resize(_nb_levels);
-
-		// build levels
-		uint64_t previous_idx = 0;
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-
-			_levels[ii].idx_begin = previous_idx;
-
-			// round size to nearest superior multiple of 64, makes it easier to clear a level
-			_levels[ii].hash_domain = (((uint64_t)(_hash_domain * pow(_proba_collision, ii)) + 63) / 64) * 64;
-			if (_levels[ii].hash_domain == 0)
-				_levels[ii].hash_domain = 64;
-			previous_idx += _levels[ii].hash_domain;
-
-			// printf("build level %i bit array : start %12llu, size %12llu  ",ii,_levels[ii]->idx_begin,_levels[ii]->hash_domain );
-			// printf(" expected elems : %.2f %% total \n",100.0*pow(_proba_collision,ii));
-		}
-
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			if (pow(_proba_collision, ii) < _percent_elem_loaded_for_fastMode)
-			{
-				_fastModeLevel = ii;
-				// printf("fast mode level :  %i \n",ii);
-				break;
-			}
-		}
-	}
-
-	// compute level and returns hash of last level reached
-	uint64_t getLevel(hash_pair_t& bbhash, const elem_t& val, int* res_level, int maxlevel = 100, int minlevel = 0) const
-	// uint64_t getLevel(hash_pair_t & bbhash, elem_t val,int * res_level, int maxlevel = 100, int minlevel =0)
-
-	{
-		int level = 0;
-		uint64_t hash_raw = 0;
-
-		for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < maxlevel; ii++)
-		{
-
-			// calc le hash suivant
-			if (ii == 0)
-				hash_raw = _hasher.h0(bbhash, val);
-			else if (ii == 1)
-				hash_raw = _hasher.h1(bbhash, val);
-			else
-			{
-				hash_raw = _hasher.next(bbhash);
-			}
-
-			if (ii >= minlevel && _levels[ii].get(hash_raw)) //
-			// if(  _levels[ii].get(hash_raw) ) //
-
-			{
-				break;
-			}
-
-			level++;
-		}
-
-		*res_level = level;
-		return hash_raw;
-	}
-
-	// insert into bitarray
-	void insertIntoLevel(uint64_t level_hash, int i)
-	{
-		//	uint64_t hashl =  level_hash % _levels[i].hash_domain;
-		uint64_t hashl = fastrange64(level_hash, _levels[i].hash_domain);
-
-		if (_levels[i].bitset.atomic_test_and_set(hashl))
-		{
-			_tempBitset->atomic_test_and_set(hashl);
-		}
-	}
-
-	// loop to insert into level i
-	template <typename Range>
-	void processLevel(Range const& input_range, int i)
-	{
-		////alloc the bitset for this level
-		_levels[i].bitset = bitVector(_levels[i].hash_domain);
-		;
-
-		// printf("---process level %i   wr %i fast %i ---\n",i,_writeEachLevel,_fastmode);
-
-		std::string fname_old = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 2) + ".tmp";
-		std::string fname_curr = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i) + ".tmp";
-		std::string fname_prev = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 1) + ".tmp";
-
-		if (_writeEachLevel)
-		{
-			// file management :
-
-			if (i > 2) // delete previous file
-			{
-				std::remove(fname_old.c_str());
-			}
-
-			if (i < _nb_levels - 1 && i > 0) // create curr file
-			{
-				_currlevelFile = std::fopen(fname_curr.c_str(), "w");
-			}
-		}
-
-		_cptLevel = 0;
-		_hashidx.store(0, std::memory_order_relaxed);
-		_idxLevelsetLevelFastmode.store(0, std::memory_order_relaxed);
-		_nb_living.store(0, std::memory_order_relaxed);
-		// create  threads
-		std::vector<std::thread> tab_threads;
-		tab_threads.reserve(_num_thread);
-		typedef decltype(input_range.begin()) it_type;
-		thread_args<Range, it_type> t_arg; // meme arg pour tous
-		t_arg.boophf = this;
-		t_arg.range = &input_range;
-		t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<it_type>(input_range.begin()));
-		t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<it_type>(input_range.end()));
-
-		t_arg.level = i;
-
-		if (_writeEachLevel && (i > 1))
-		{
-
-			auto data_iterator_level = file_binary<elem_t>(fname_prev);
-
-			typedef decltype(data_iterator_level.begin()) disklevel_it_type;
-
-			// data_iterator_level.begin();
-			t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
-			t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
-
-			for (uint32_t ii = 0; ii < _num_thread; ii++)
-			{
-				// 创建每个线程独立的参数副本，防止竞态
-				thread_args<Range, it_type>* my_arg = new thread_args<Range, it_type>(t_arg);
-				tab_threads.emplace_back([my_arg]()
-				                         {
-						thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-						delete my_arg; });
-			}
-
-			// must join here before the block is closed and file_binary is destroyed (and closes the file)
-			for (auto& t : tab_threads)
-			{
-				t.join();
-			}
-		}
-
-		else
-		{
-			if (_fastmode && i >= (_fastModeLevel + 1))
-			{
-
-				/* we'd like to do t_arg.it = data_iterator.begin() but types are different;
-				 so, casting to (void*) because of that; and we remember the type in the template */
-				typedef decltype(setLevelFastmode.begin()) fastmode_it_type;
-				t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
-				t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
-
-				/* we'd like to do t_arg.it = data_iterator.begin() but types are different;
-				 so, casting to (void*) because of that; and we remember the type in the template */
-
-				for (uint32_t ii = 0; ii < _num_thread; ii++)
-				{
-					// 创建每个线程独立的参数副本，防止竞态
-					thread_args<Range, it_type>* my_arg = new thread_args<Range, it_type>(t_arg);
-					tab_threads.emplace_back([my_arg]()
-					                         {
-							thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-							delete my_arg; });
-				}
-			}
-			else
-			{
-				for (uint32_t ii = 0; ii < _num_thread; ii++)
-				{
-					// 创建每个线程独立的参数副本，防止竞态
-					thread_args<Range, it_type>* my_arg = new thread_args<Range, it_type>(t_arg);
-					tab_threads.emplace_back([my_arg]()
-					                         {
-							thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-							delete my_arg; });
-				}
-			}
-			// joining
-			for (auto& t : tab_threads)
-			{
-				t.join();
-			}
-		}
-		// printf("\ngoing to level %i  : %llu elems  %.2f %%  expected : %.2f %% \n",i,_cptLevel,100.0* _cptLevel/(float)_nelem,100.0* pow(_proba_collision,i) );
-
-		// printf("\ncpt total processed %llu \n",_cptTotalProcessed);
-		if (_fastmode && i == _fastModeLevel) // shrink to actual number of elements in set
-		{
-			// printf("\nresize setLevelFastmode to %lli \n",_idxLevelsetLevelFastmode);
-			setLevelFastmode.resize(_idxLevelsetLevelFastmode);
-		}
-
-		if (_writeEachLevel)
-		{
-			if (i < _nb_levels - 1 && i > 0)
-			{
-				fflush(_currlevelFile);
-				fclose(_currlevelFile);
-			}
-
-			if (i == _nb_levels - 1) // delete last file
-			{
-				std::remove(fname_prev.c_str());
-			}
-		}
-	}
-
-  private:
-	// level ** _levels;
-	std::vector<level> _levels;
-	uint32_t _nb_levels;
-	MultiHasher_t _hasher;
-	bitVector* _tempBitset;
-
-	double _gamma;
-	uint64_t _hash_domain;
-	uint64_t _nelem;
-	std::unordered_map<elem_t, uint64_t, Hasher_t> _final_hash;
-	Progress _progressBar;
-	std::atomic<uint32_t> _nb_living{0};
-	uint32_t _num_thread;
-	std::atomic<uint64_t> _hashidx{0};
-	double _proba_collision;
-	uint64_t _lastbitsetrank;
-	std::atomic<uint64_t> _idxLevelsetLevelFastmode;
-	uint64_t _cptLevel;
-	uint64_t _cptTotalProcessed;
-
-	// fast build mode , requires  that _percent_elem_loaded_for_fastMode %   elems are loaded in ram
-	float _percent_elem_loaded_for_fastMode;
-	bool _fastmode;
-	std::vector<elem_t> setLevelFastmode;
-	//	std::vector< elem_t > setLevelFastmode_next; // todo shrinker le set e nram a chaque niveau  ?
-
-	std::vector<std::vector<elem_t>> bufferperThread;
-
-	int _fastModeLevel;
-	bool _withprogress;
-	bool _built;
-	bool _writeEachLevel;
-	FILE* _currlevelFile;
-	int _pid;
-
-  public:
-	std::mutex _mutex;
+    template <typename Iterator>
+    void pthread_processLevel(std::vector<elem_t>& buffer, std::shared_ptr<Iterator> shared_it, 
+                              std::shared_ptr<Iterator> until_p, int i) {
+        uint64_t nb_done = 0;
+        const int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
+        auto until = *until_p;
+        uint64_t inbuff = 0;
+
+        uint64_t writebuff = 0;
+        std::vector<elem_t>& myWriteBuff = bufferperThread[tid];
+
+        for (bool isRunning = true; isRunning;) {
+            // Safely copy items into buffer
+            {
+                std::lock_guard<std::mutex> lock(_mutex);
+                for (; inbuff < NBBUFF && (*shared_it) != until; ++(*shared_it)) {
+                    buffer[inbuff++] = *(*shared_it);
+                }
+                if ((*shared_it) == until) {
+                    isRunning = false;
+                }
+            }
+
+            // Process buffered elements
+            for (uint64_t ii = 0; ii < inbuff; ++ii) {
+                const elem_t val = buffer[ii];
+
+                hash_pair_t bbhash;
+                int level;
+                if (_writeEachLevel) {
+                    getLevel(bbhash, val, &level, i, i - 1);
+                } else {
+                    getLevel(bbhash, val, &level, i);
+                }
+
+                if (level == i) {
+                    if (_fastmode && i == _fastModeLevel) {
+                        const int idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
+                        if (idxl2 >= static_cast<int>(setLevelFastmode.size())) {
+                            _fastmode = false;
+                        } else {
+                            setLevelFastmode[idxl2] = val;
+                        }
+                    }
+
+                    // Insert into next level or final hash
+                    if (i == _nb_levels - 1) {
+                        const uint64_t hashidx = _hashidx.fetch_add(1, std::memory_order_relaxed);
+                        std::lock_guard<std::mutex> lock(_mutex);
+                        _final_hash[val] = hashidx;
+                    } else {
+                        if (_writeEachLevel && i > 0 && i < _nb_levels - 1) {
+                            if (writebuff >= NBBUFF) {
+                                write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
+                            }
+                        }
+
+                        // Compute next hash
+                        uint64_t level_hash;
+                        if (level == 0) {
+                            level_hash = _hasher.h0(bbhash, val);
+                        } else if (level == 1) {
+                            level_hash = _hasher.h1(bbhash, val);
+                        } else {
+                            level_hash = _hasher.next(bbhash);
+                        }
+                        insertIntoLevel(level_hash, i);
+                    }
+                }
+
+                ++nb_done;
+                if ((nb_done & 1023) == 0 && _withprogress) {
+                    _progressBar.inc(nb_done, tid);
+                    nb_done = 0;
+                }
+            }
+
+            inbuff = 0;
+        }
+
+        if (_writeEachLevel && writebuff > 0) {
+            write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
+        }
+    }
+
+    void save(std::ostream& os) const {
+        write_le(os, _gamma);
+        write_le(os, _nb_levels);
+        write_le(os, _lastbitsetrank);
+        write_le(os, _nelem);
+        
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            _levels[ii].bitset.save(os);
+        }
+
+        // Save final hash table
+        const uint64_t final_hash_size = _final_hash.size();
+        write_le(os, final_hash_size);
+
+        for (const auto& [key, value] : _final_hash) {
+            write_le(os, key);
+            write_le(os, value);
+        }
+    }
+
+    void load(std::istream& is) {
+        read_le(is, _gamma);
+        read_le(is, _nb_levels);
+        read_le(is, _lastbitsetrank);
+        read_le(is, _nelem);
+
+        _levels.resize(_nb_levels);
+
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            _levels[ii].bitset.load(is);
+        }
+
+        // Recompute level parameters
+        _proba_collision = 1.0 - std::pow(((_gamma * static_cast<double>(_nelem) - 1) / 
+                                          (_gamma * static_cast<double>(_nelem))), _nelem - 1);
+        uint64_t previous_idx = 0;
+        _hash_domain = static_cast<uint64_t>(std::ceil(static_cast<double>(_nelem) * _gamma));
+        
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            _levels[ii].idx_begin = previous_idx;
+            _levels[ii].hash_domain = (static_cast<uint64_t>(_hash_domain * std::pow(_proba_collision, ii)) + 63) / 64 * 64;
+            if (_levels[ii].hash_domain == 0) {
+                _levels[ii].hash_domain = 64;
+            }
+            previous_idx += _levels[ii].hash_domain;
+        }
+
+        // Restore final hash table
+        _final_hash.clear();
+        uint64_t final_hash_size;
+        read_le(is, final_hash_size);
+
+        for (uint64_t ii = 0; ii < final_hash_size; ++ii) {
+            elem_t key;
+            uint64_t value;
+            read_le(is, key);
+            read_le(is, value);
+            _final_hash[key] = value;
+        }
+        _built = true;
+    }
+
+private:
+    void setup() {
+        const uint64_t tid_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+        _pid = static_cast<int>(tid_hash);
+
+        _cptTotalProcessed = 0;
+
+        if (_fastmode) {
+            setLevelFastmode.resize(static_cast<size_t>(_percent_elem_loaded_for_fastMode * static_cast<double>(_nelem)));
+        }
+
+        bufferperThread.resize(_num_thread);
+        if (_writeEachLevel) {
+            for (uint32_t ii = 0; ii < _num_thread; ++ii) {
+                bufferperThread[ii].resize(NBBUFF);
+            }
+        }
+
+        _proba_collision = 1.0 - std::pow(((_gamma * static_cast<double>(_nelem) - 1) / 
+                                          (_gamma * static_cast<double>(_nelem))), _nelem - 1);
+
+        _nb_levels = 25;
+        _levels.resize(_nb_levels);
+
+        // Build level structures
+        uint64_t previous_idx = 0;
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            _levels[ii].idx_begin = previous_idx;
+
+            // Round size to nearest superior multiple of 64
+            _levels[ii].hash_domain = (static_cast<uint64_t>(_hash_domain * std::pow(_proba_collision, ii)) + 63) / 64 * 64;
+            if (_levels[ii].hash_domain == 0) {
+                _levels[ii].hash_domain = 64;
+            }
+            previous_idx += _levels[ii].hash_domain;
+        }
+
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            if (std::pow(_proba_collision, ii) < _percent_elem_loaded_for_fastMode) {
+                _fastModeLevel = ii;
+                break;
+            }
+        }
+    }
+
+    /// Compute level for element and return hash of last level reached
+    [[nodiscard]] uint64_t getLevel(hash_pair_t& bbhash, const elem_t& val, int* res_level, 
+                                     int maxlevel = 100, int minlevel = 0) const {
+        int level = 0;
+        uint64_t hash_raw = 0;
+
+        for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < maxlevel; ++ii) {
+            // Compute next hash
+            if (ii == 0) {
+                hash_raw = _hasher.h0(bbhash, val);
+            } else if (ii == 1) {
+                hash_raw = _hasher.h1(bbhash, val);
+            } else {
+                hash_raw = _hasher.next(bbhash);
+            }
+
+            if (ii >= minlevel && _levels[ii].get(hash_raw)) {
+                break;
+            }
+            ++level;
+        }
+
+        *res_level = level;
+        return hash_raw;
+    }
+
+    /// Insert element into bit array level
+    void insertIntoLevel(uint64_t level_hash, int i) {
+        const uint64_t hashl = fastrange64(level_hash, _levels[i].hash_domain);
+        if (_levels[i].bitset.atomic_test_and_set(hashl)) {
+            _tempBitset->atomic_test_and_set(hashl);
+        }
+    }
+
+    /// Process elements at level i
+    template <typename Range>
+    void processLevel(const Range& input_range, int i) {
+        _levels[i].bitset = bitVector(_levels[i].hash_domain);
+
+        const std::string fname_old = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 2) + ".tmp";
+        const std::string fname_curr = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i) + ".tmp";
+        const std::string fname_prev = "temp_p" + std::to_string(_pid) + "_level_" + std::to_string(i - 1) + ".tmp";
+
+        if (_writeEachLevel) {
+            if (i > 2) {
+                std::remove(fname_old.c_str());
+            }
+
+            if (i < _nb_levels - 1 && i > 0) {
+                _currlevelFile = std::fopen(fname_curr.c_str(), "w");
+            }
+        }
+
+        _cptLevel = 0;
+        _hashidx.store(0, std::memory_order_relaxed);
+        _idxLevelsetLevelFastmode.store(0, std::memory_order_relaxed);
+        _nb_living.store(0, std::memory_order_relaxed);
+        
+        // Create threads
+        std::vector<std::thread> tab_threads;
+        tab_threads.reserve(_num_thread);
+        using it_type = decltype(input_range.begin());
+        thread_args<Range, it_type> t_arg;
+        t_arg.boophf = this;
+        t_arg.range = &input_range;
+        t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<it_type>(input_range.begin()));
+        t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<it_type>(input_range.end()));
+        t_arg.level = i;
+
+        if (_writeEachLevel && (i > 1)) {
+            auto data_iterator_level = file_binary<elem_t>(fname_prev);
+            using disklevel_it_type = decltype(data_iterator_level.begin());
+
+            t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
+            t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
+
+            for (uint32_t ii = 0; ii < _num_thread; ++ii) {
+                // Create independent copy for each thread
+                auto* my_arg = new thread_args<Range, it_type>(t_arg);
+                tab_threads.emplace_back([my_arg]() {
+                    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+                    delete my_arg;
+                });
+            }
+
+            // Must join here before file_binary is destroyed
+            for (auto& t : tab_threads) {
+                t.join();
+            }
+        } else {
+            if (_fastmode && i >= (_fastModeLevel + 1)) {
+                using fastmode_it_type = decltype(setLevelFastmode.begin());
+                t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
+                t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
+
+                for (uint32_t ii = 0; ii < _num_thread; ++ii) {
+                    auto* my_arg = new thread_args<Range, it_type>(t_arg);
+                    tab_threads.emplace_back([my_arg]() {
+                        thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+                        delete my_arg;
+                    });
+                }
+            } else {
+                for (uint32_t ii = 0; ii < _num_thread; ++ii) {
+                    auto* my_arg = new thread_args<Range, it_type>(t_arg);
+                    tab_threads.emplace_back([my_arg]() {
+                        thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+                        delete my_arg;
+                    });
+                }
+            }
+            
+            for (auto& t : tab_threads) {
+                t.join();
+            }
+        }
+
+        if (_fastmode && i == _fastModeLevel) {
+            setLevelFastmode.resize(_idxLevelsetLevelFastmode);
+        }
+
+        if (_writeEachLevel) {
+            if (i < _nb_levels - 1 && i > 0) {
+                std::fflush(_currlevelFile);
+                std::fclose(_currlevelFile);
+            }
+
+            if (i == _nb_levels - 1) {
+                std::remove(fname_prev.c_str());
+            }
+        }
+    }
+
+private:
+    std::vector<level> _levels;
+    uint32_t _nb_levels{0};
+    MultiHasher_t _hasher;
+    bitVector* _tempBitset{nullptr};
+
+    double _gamma{2.0};
+    uint64_t _hash_domain{0};
+    uint64_t _nelem{0};
+    std::unordered_map<elem_t, uint64_t, Hasher_t> _final_hash;
+    Progress _progressBar;
+    std::atomic<uint32_t> _nb_living{0};
+    uint32_t _num_thread{1};
+    std::atomic<uint64_t> _hashidx{0};
+    double _proba_collision{0.0};
+    uint64_t _lastbitsetrank{0};
+    std::atomic<uint64_t> _idxLevelsetLevelFastmode{0};
+    uint64_t _cptLevel{0};
+    uint64_t _cptTotalProcessed{0};
+
+    float _percent_elem_loaded_for_fastMode{0.03f};
+    bool _fastmode{false};
+    std::vector<elem_t> setLevelFastmode;
+
+    std::vector<std::vector<elem_t>> bufferperThread;
+
+    int _fastModeLevel{0};
+    bool _withprogress{true};
+    bool _built{false};
+    bool _writeEachLevel{true};
+    FILE* _currlevelFile{nullptr};
+    int _pid{0};
+
+public:
+    std::mutex _mutex;
 };
 
 ////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark threading
+// Threading
 ////////////////////////////////////////////////////////////////
 
 template <typename elem_t, typename Hasher_t, typename Range, typename it_type>
-void thread_processLevel(thread_args<Range, it_type>* targ)
-{
-	if (targ == nullptr)
-		return;
+void thread_processLevel(thread_args<Range, it_type>* targ) {
+    if (targ == nullptr) {
+        return;
+    }
 
-	auto* obw = static_cast<mphf<elem_t, Hasher_t>*>(targ->boophf);
-	int level = targ->level;
+    auto* obw = static_cast<mphf<elem_t, Hasher_t>*>(targ->boophf);
+    const int level = targ->level;
 
-	std::vector<elem_t> buffer(NBBUFF);
+    std::vector<elem_t> buffer(NBBUFF);
 
-	std::shared_ptr<it_type> startit;
-	std::shared_ptr<it_type> until_p;
+    std::shared_ptr<it_type> startit;
+    std::shared_ptr<it_type> until_p;
 
-	{
-		std::lock_guard<std::mutex> lock(obw->_mutex);
-		startit = std::static_pointer_cast<it_type>(targ->it_p);
-		until_p = std::static_pointer_cast<it_type>(targ->until_p);
-	}
+    {
+        std::lock_guard<std::mutex> lock(obw->_mutex);
+        startit = std::static_pointer_cast<it_type>(targ->it_p);
+        until_p = std::static_pointer_cast<it_type>(targ->until_p);
+    }
 
-	obw->pthread_processLevel(buffer, startit, until_p, level);
+    obw->pthread_processLevel(buffer, startit, until_p, level);
 }
+
 } // namespace boomphf
