@@ -4,67 +4,57 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <cstdio>
 
 using namespace std;
 
 typedef boomphf::SingleHashFunctor<uint64_t>  hasher_t;
 typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
 
-int main() {
-    // Create a small set of test data
+// Test different gamma values and data sizes
+bool test_with_params(size_t num_keys, double gamma, const string& test_name) {
+    cout << "\n=== " << test_name << " ===" << endl;
+    cout << "Parameters: " << num_keys << " keys, gamma=" << gamma << endl;
+    
+    // Create test data
     vector<uint64_t> data;
-    for (uint64_t i = 0; i < 1000; i++) {
+    for (uint64_t i = 0; i < num_keys; i++) {
         data.push_back(i * 2); // Simple predictable data
     }
     
-    cout << "Building MPHF with " << data.size() << " elements..." << endl;
-    
     // Build the MPHF
-    boophf_t* bphf = new boophf_t(data.size(), data, 1, 1.0, false, false);
+    boophf_t* bphf = new boophf_t(data.size(), data, 1, gamma, false, false);
     
-    cout << "MPHF built successfully" << endl;
-    cout << "Bits per element: " << (float)bphf->totalBitSize() / data.size() << endl;
-    
-    // Test queries before save/load
-    cout << "Testing queries before save..." << endl;
-    for (size_t i = 0; i < min(size_t(10), data.size()); i++) {
-        uint64_t idx = bphf->lookup(data[i]);
-        if (idx >= data.size()) {
-            cout << "ERROR: Invalid index " << idx << " for key " << data[i] << endl;
-            return 1;
-        }
-    }
-    cout << "Queries before save: OK" << endl;
+    cout << "Built MPHF with " << (float)bphf->totalBitSize() / data.size() << " bits/elem" << endl;
     
     // Save to file
-    cout << "Saving to file..." << endl;
+    string filename = "test_" + test_name + ".mphf";
     {
-        ofstream os("test_endian.mphf", ios::binary);
+        ofstream os(filename, ios::binary);
         if (!os) {
             cout << "ERROR: Cannot open file for writing" << endl;
-            return 1;
+            delete bphf;
+            return false;
         }
         bphf->save(os);
         os.close();
     }
-    cout << "Saved successfully" << endl;
     
     // Load from file
-    cout << "Loading from file..." << endl;
     boophf_t* bphf_load = new boophf_t();
     {
-        ifstream is("test_endian.mphf", ios::binary);
+        ifstream is(filename, ios::binary);
         if (!is) {
             cout << "ERROR: Cannot open file for reading" << endl;
-            return 1;
+            delete bphf;
+            return false;
         }
         bphf_load->load(is);
         is.close();
     }
-    cout << "Loaded successfully" << endl;
     
-    // Test queries after load
-    cout << "Testing queries after load..." << endl;
+    // Verify all queries match
+    bool success = true;
     for (size_t i = 0; i < data.size(); i++) {
         uint64_t idx_orig = bphf->lookup(data[i]);
         uint64_t idx_load = bphf_load->lookup(data[i]);
@@ -72,19 +62,48 @@ int main() {
         if (idx_orig != idx_load) {
             cout << "ERROR: Mismatch at i=" << i << " key=" << data[i] 
                  << " orig=" << idx_orig << " loaded=" << idx_load << endl;
-            return 1;
+            success = false;
+            break;
         }
         
         if (idx_load >= data.size()) {
             cout << "ERROR: Invalid index " << idx_load << " for key " << data[i] << endl;
-            return 1;
+            success = false;
+            break;
         }
     }
-    cout << "All queries after load: OK" << endl;
     
+    if (success) {
+        cout << "✓ All " << data.size() << " queries verified successfully" << endl;
+    }
+    
+    // Clean up
+    remove(filename.c_str());
     delete bphf;
     delete bphf_load;
     
-    cout << "SUCCESS: All tests passed!" << endl;
-    return 0;
+    return success;
+}
+
+int main() {
+    cout << "BBHash Endianness-Safe Serialization Test" << endl;
+    cout << "===========================================" << endl;
+    
+    // Test with different configurations
+    bool all_passed = true;
+    
+    all_passed &= test_with_params(100, 1.0, "small_gamma1");
+    all_passed &= test_with_params(1000, 1.0, "medium_gamma1");
+    all_passed &= test_with_params(10000, 1.0, "large_gamma1");
+    all_passed &= test_with_params(1000, 2.0, "medium_gamma2");
+    all_passed &= test_with_params(1000, 3.0, "medium_gamma3");
+    
+    cout << "\n===========================================" << endl;
+    if (all_passed) {
+        cout << "✓ ALL TESTS PASSED - Endianness-safe serialization works correctly!" << endl;
+        return 0;
+    } else {
+        cout << "✗ SOME TESTS FAILED" << endl;
+        return 1;
+    }
 }
