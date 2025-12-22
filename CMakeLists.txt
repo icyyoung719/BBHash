@@ -3,62 +3,55 @@ project(BBHash)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# 设置构建类型
+# Set build type
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-
-# 禁用warning
+# Disable warnings
 add_compile_options(
     $<$<CXX_COMPILER_ID:MSVC>:/w>
     $<$<CXX_COMPILER_ID:GNU>:-w>
     $<$<CXX_COMPILER_ID:Clang>:-w>
 )
 
-
-# 通用编译选项
-set(COMMON_FLAGS "")
+# Common compile options
 if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-else()
-  set(COMMON_FLAGS "${COMMON_FLAGS} -lpthread")
 endif()
 
-# 特殊构建选项
+# Build-specific options
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(COMMON_FLAGS "${COMMON_FLAGS} -O0 -g -DASSERTS")
+  add_compile_options(-O0 -g -DASSERTS)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Profile")
-  set(COMMON_FLAGS "${COMMON_FLAGS} -pg")
+  add_compile_options(-pg)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Sanitize")
-  set(COMMON_FLAGS "-fsanitize=address -fno-omit-frame-pointer -O1 -fno-optimize-sibling-calls -g")
+  add_compile_options(-fsanitize=address -fno-omit-frame-pointer -O1 -fno-optimize-sibling-calls -g)
+  add_link_options(-fsanitize=address)
 endif()
 
-# 将选项应用到整个项目
-add_compile_options(${COMMON_FLAGS})
+# Include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# 包含当前目录头文件
-include_directories(${CMAKE_SOURCE_DIR})
+# Examples
+add_executable(example examples/example.cpp)
+add_executable(example_custom_hash examples/example_custom_hash.cpp)
+add_executable(main examples/main.cpp)
 
-set(SOURCES
-    test_min.cpp
-    BooPHF.h
-    bitvector.hpp
-    progress.hpp
-    platform_time.h
-)
+# Tests
+add_executable(test_endian tests/test_endian.cpp)
+add_executable(test_min tests/test_min.cpp)
 
-# 添加可执行文件
-add_executable(${PROJECT_NAME} ${SOURCES})
-
-target_include_directories(${PROJECT_NAME} PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-
-# 链接 pthread （非 Windows 平台）
+# Link pthread on non-Windows platforms
 if (NOT MSVC)
-  # target_link_libraries(Bootest pthread)
-  target_link_libraries(test pthread)
-  # target_link_libraries(example_custom_hash pthread)
+  target_link_libraries(example pthread)
+  target_link_libraries(example_custom_hash pthread)
+  target_link_libraries(main pthread)
+  target_link_libraries(test_endian pthread)
+  target_link_libraries(test_min pthread)
 endif()
+
+# Note: bootest.cpp has compilation issues and will be fixed in a future update
+# It would be built with:
+# add_executable(bootest tests/bootest.cpp)
+# target_link_libraries(bootest pthread)

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <sys/time.h>
 #include <random>
 #include <algorithm>
 #include <climits>

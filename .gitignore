@@ -1,12 +1,16 @@
 build/
+_codeql_build_dir/
 
 .vscode/
 
-# Binaries
+# Binaries (legacy - now built in build/ directory)
 example
 test_endian
 Bootest
+bootest
 example_custom_hash
+main
+test_min
 
 # Temporary files
 *.tmp

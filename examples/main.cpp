@@ -36,7 +36,9 @@ int main() {
 
     // 构造 BBHash 最小完美哈希
     double gamma = 2.0; // 构建时的空间/速度权衡参数，2.0较安全
-    boomphf::mphf<uint64_t> mphf(keys.size(), keys.data(), keys.size(), gamma);
+    typedef boomphf::SingleHashFunctor<uint64_t> hasher_t;
+    typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
+    boophf_t mphf(keys.size(), keys, 1, gamma, false, false);
 
     std::cout << "MPHF built for " << keys.size() << " keys." << std::endl;
 
