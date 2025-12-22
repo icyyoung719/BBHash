@@ -1,19 +1,21 @@
-﻿// BooPHF library
-// intended to be a minimal perfect hash function with fast and low memory construction, at the cost of (slightly) higher bits/elem than other state of the art libraries once built.
-// should work with arbitray large number of elements, based on a cascade of  "collision-free" bit arrays
+﻿/// BooPHF - Minimal perfect hash function library
+/// Fast and low memory construction, with slightly higher bits/elem than other libraries.
+/// Supports arbitrarily large number of elements via cascade of collision-free bit arrays.
 
 #pragma once
-#include <assert.h>
-#include <climits>
-#include <inttypes.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
+#include <cassert>
+#include <cinttypes>
+#include <climits>
+#include <cstdint>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <array>
 #include <iostream>
-#include <memory> // for make_shared
+#include <iterator>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -24,579 +26,428 @@
 #include "platform_time.h"
 #include "progress.hpp"
 
-namespace boomphf
-{
+namespace boomphf {
 
-////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark utils
-////////////////////////////////////////////////////////////////
-
-// iterator from disk file of uint64_t with buffered read,   todo template
+/// Buffered file iterator for reading binary data
 template <typename basetype>
-class bfile_iterator : public std::iterator<std::forward_iterator_tag, basetype>
-{
-  public:
-	bfile_iterator()
-	    : _is(nullptr), _pos(0), _inbuff(0), _cptread(0)
-	{
-		_buffsize = 10000;
-		_buffer = (basetype*)malloc(_buffsize * sizeof(basetype));
-	}
+class bfile_iterator {
+public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = basetype;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const basetype*;
+    using reference = const basetype&;
 
-	bfile_iterator(const bfile_iterator& cr)
-	{
-		_buffsize = cr._buffsize;
-		_pos = cr._pos;
-		_is = cr._is;
-		_buffer = (basetype*)malloc(_buffsize * sizeof(basetype));
-		memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
-		_inbuff = cr._inbuff;
-		_cptread = cr._cptread;
-		_elem = cr._elem;
-	}
+    bfile_iterator() : _is(nullptr), _pos(0), _inbuff(0), _cptread(0), _buffsize(10000) {
+        _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
+    }
 
-	bfile_iterator(FILE* is) : _is(is), _pos(0), _inbuff(0), _cptread(0)
-	{
-		// printf("bf it %p\n",_is);
-		_buffsize = 10000;
-		_buffer = (basetype*)malloc(_buffsize * sizeof(basetype));
-		int reso = fseek(_is, 0, SEEK_SET);
-		advance();
-	}
+    bfile_iterator(const bfile_iterator& cr) 
+        : _is(cr._is), _pos(cr._pos), _buffsize(cr._buffsize), 
+          _inbuff(cr._inbuff), _cptread(cr._cptread), _elem(cr._elem) {
+        _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
+        std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
+    }
 
-	~bfile_iterator()
-	{
-		if (_buffer != NULL)
-			free(_buffer);
-	}
+    explicit bfile_iterator(FILE* is) 
+        : _is(is), _pos(0), _inbuff(0), _cptread(0), _buffsize(10000) {
+        _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
+        std::fseek(_is, 0, SEEK_SET);
+        advance();
+    }
 
-	basetype const& operator*() { return _elem; }
+    ~bfile_iterator() {
+        std::free(_buffer);
+    }
 
-	bfile_iterator& operator++()
-	{
-		advance();
-		return *this;
-	}
+    reference operator*() const { return _elem; }
 
-	friend bool operator==(bfile_iterator const& lhs, bfile_iterator const& rhs)
-	{
-		if (!lhs._is || !rhs._is)
-		{
-			if (!lhs._is && !rhs._is)
-			{
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-		assert(lhs._is == rhs._is);
-		return rhs._pos == lhs._pos;
-	}
+    bfile_iterator& operator++() {
+        advance();
+        return *this;
+    }
 
-	friend bool operator!=(bfile_iterator const& lhs, bfile_iterator const& rhs) { return !(lhs == rhs); }
+    friend bool operator==(const bfile_iterator& lhs, const bfile_iterator& rhs) {
+        if (!lhs._is || !rhs._is) {
+            return !lhs._is && !rhs._is;
+        }
+        assert(lhs._is == rhs._is);
+        return rhs._pos == lhs._pos;
+    }
 
-  private:
-	void advance()
-	{
+    friend bool operator!=(const bfile_iterator& lhs, const bfile_iterator& rhs) { 
+        return !(lhs == rhs); 
+    }
 
-		// printf("_cptread %i _inbuff %i \n",_cptread,_inbuff);
+private:
+    void advance() {
+        ++_pos;
 
-		_pos++;
+        if (_cptread >= _inbuff) {
+            const int res = std::fread(_buffer, sizeof(basetype), _buffsize, _is);
+            _inbuff = res;
+            _cptread = 0;
 
-		if (_cptread >= _inbuff)
-		{
+            if (res == 0) {
+                _is = nullptr;
+                _pos = 0;
+                return;
+            }
+        }
 
-			int res = fread(_buffer, sizeof(basetype), _buffsize, _is);
-
-			// printf("read %i new elem last %llu  %p\n",res,_buffer[res-1],_is);
-			_inbuff = res;
-			_cptread = 0;
-
-			if (res == 0)
-			{
-				_is = nullptr;
-				_pos = 0;
-				return;
-			}
-		}
-
-		_elem = _buffer[_cptread];
-		_cptread++;
-	}
-	basetype _elem;
-	FILE* _is;
-	unsigned long _pos;
-
-	basetype* _buffer; // for buffered read
-	int _inbuff, _cptread;
-	int _buffsize;
+        _elem = _buffer[_cptread];
+        ++_cptread;
+    }
+    
+    basetype _elem;
+    FILE* _is;
+    unsigned long _pos;
+    basetype* _buffer;
+    int _inbuff;
+    int _cptread;
+    int _buffsize;
 };
 
+/// Binary file reader with iterator interface
 template <typename type_elem>
-class file_binary
-{
-  public:
-	file_binary(const char* filename)
-	{
-		_is = fopen(filename, "rb");
+class file_binary {
+public:
+    explicit file_binary(const char* filename) {
+        _is = std::fopen(filename, "rb");
+        if (!_is) {
+            throw std::invalid_argument("Error opening " + std::string(filename));
+        }
+    }
 
-		if (!_is)
-		{
-			throw std::invalid_argument("Error opening " + std::string(filename));
-		}
-	}
+    explicit file_binary(const std::string& filename) : file_binary(filename.c_str()) {}
 
-	file_binary(const std::string& filename)
-	    : file_binary(filename.c_str())
-	{
-	}
+    ~file_binary() {
+        std::fclose(_is);
+    }
 
-	~file_binary()
-	{
-		fclose(_is);
-	}
+    [[nodiscard]] bfile_iterator<type_elem> begin() const {
+        return bfile_iterator<type_elem>(_is);
+    }
 
-	bfile_iterator<type_elem> begin() const
-	{
-		return bfile_iterator<type_elem>(_is);
-	}
+    [[nodiscard]] bfile_iterator<type_elem> end() const { 
+        return bfile_iterator<type_elem>(); 
+    }
 
-	bfile_iterator<type_elem> end() const { return bfile_iterator<type_elem>(); }
+    [[nodiscard]] size_t size() const { return 0; }
 
-	size_t size() const { return 0; } // todo ?
-
-  private:
-	FILE* _is;
+private:
+    FILE* _is;
 };
 
 ////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark hasher
+// Hash functions
 ////////////////////////////////////////////////////////////////
 
-typedef std::array<uint64_t, 10> hash_set_t;
-typedef std::array<uint64_t, 2> hash_pair_t;
+using hash_set_t = std::array<uint64_t, 10>;
+using hash_pair_t = std::array<uint64_t, 2>;
 
+/// Hash function generator for Items
 template <typename Item>
-class HashFunctors
-{
-  public:
-	/** Constructor.
-	 * \param[in] nbFct : number of hash functions to be used
-	 * \param[in] seed : some initialization code for defining the hash functions. */
-	HashFunctors()
-	{
-		_nbFct = 7; // use 7 hash func
-		_user_seed = 0;
-		generate_hash_seed();
-	}
+class HashFunctors {
+public:
+    HashFunctors() : _nbFct(7), _user_seed(0) {
+        generate_hash_seed();
+    }
 
-	// return one hash
-	uint64_t operator()(const Item& key, size_t idx) const { return hash64(key, _seed_tab[idx]); }
+    [[nodiscard]] uint64_t operator()(const Item& key, size_t idx) const { 
+        return hash64(key, _seed_tab[idx]); 
+    }
 
-	uint64_t hashWithSeed(const Item& key, uint64_t seed) const { return hash64(key, seed); }
+    [[nodiscard]] uint64_t hashWithSeed(const Item& key, uint64_t seed) const { 
+        return hash64(key, seed); 
+    }
 
-	// this one returns all the 7 hashes
-	// maybe use xorshift instead, for faster hash compute
-	hash_set_t operator()(const Item& key)
-	{
-		hash_set_t hset;
+    /// Returns all hash values for the key
+    [[nodiscard]] hash_set_t operator()(const Item& key) const {
+        hash_set_t hset;
+        for (size_t ii = 0; ii < 10; ++ii) {
+            hset[ii] = hash64(key, _seed_tab[ii]);
+        }
+        return hset;
+    }
 
-		for (size_t ii = 0; ii < 10; ii++)
-		{
-			hset[ii] = hash64(key, _seed_tab[ii]);
-		}
-		return hset;
-	}
+private:
+    [[nodiscard]] static inline uint64_t hash64(Item key, uint64_t seed) {
+        uint64_t hash = seed;
+        hash ^= (hash << 7) ^ key * (hash >> 3) ^ (~((hash << 11) + (key ^ (hash >> 5))));
+        hash = (~hash) + (hash << 21);
+        hash = hash ^ (hash >> 24);
+        hash = (hash + (hash << 3)) + (hash << 8);
+        hash = hash ^ (hash >> 14);
+        hash = (hash + (hash << 2)) + (hash << 4);
+        hash = hash ^ (hash >> 28);
+        hash = hash + (hash << 31);
+        return hash;
+    }
 
-  private:
-	inline static uint64_t hash64(Item key, uint64_t seed)
-	{
-		uint64_t hash = seed;
-		hash ^= (hash << 7) ^ key * (hash >> 3) ^ (~((hash << 11) + (key ^ (hash >> 5))));
-		hash = (~hash) + (hash << 21);
-		hash = hash ^ (hash >> 24);
-		hash = (hash + (hash << 3)) + (hash << 8);
-		hash = hash ^ (hash >> 14);
-		hash = (hash + (hash << 2)) + (hash << 4);
-		hash = hash ^ (hash >> 28);
-		hash = hash + (hash << 31);
+    void generate_hash_seed() {
+        static constexpr uint64_t rbase[MAXNBFUNC] = {
+            0xAAAAAAAA55555555ULL, 0x33333333CCCCCCCCULL, 0x6666666699999999ULL, 0xB5B5B5B54B4B4B4BULL,
+            0xAA55AA5555335533ULL, 0x33CC33CCCC66CC66ULL, 0x6699669999B599B5ULL, 0xB54BB54B4BAA4BAAULL,
+            0xAA33AA3355CC55CCULL, 0x33663366CC99CC99ULL
+        };
 
-		return hash;
-	}
+        for (size_t i = 0; i < MAXNBFUNC; ++i) {
+            _seed_tab[i] = rbase[i];
+        }
+        for (size_t i = 0; i < MAXNBFUNC; ++i) {
+            _seed_tab[i] = _seed_tab[i] * _seed_tab[(i + 3) % MAXNBFUNC] + _user_seed;
+        }
+    }
 
-	/* */
-	void generate_hash_seed()
-	{
-		static const uint64_t rbase[MAXNBFUNC] =
-		    {
-		        0xAAAAAAAA55555555ULL, 0x33333333CCCCCCCCULL, 0x6666666699999999ULL, 0xB5B5B5B54B4B4B4BULL,
-		        0xAA55AA5555335533ULL, 0x33CC33CCCC66CC66ULL, 0x6699669999B599B5ULL, 0xB54BB54B4BAA4BAAULL,
-		        0xAA33AA3355CC55CCULL, 0x33663366CC99CC99ULL};
-
-		for (size_t i = 0; i < MAXNBFUNC; ++i)
-		{
-			_seed_tab[i] = rbase[i];
-		}
-		for (size_t i = 0; i < MAXNBFUNC; ++i)
-		{
-			_seed_tab[i] = _seed_tab[i] * _seed_tab[(i + 3) % MAXNBFUNC] + _user_seed;
-		}
-	}
-
-	size_t _nbFct;
-
-	static const size_t MAXNBFUNC = 10;
-	uint64_t _seed_tab[MAXNBFUNC];
-	uint64_t _user_seed;
+    size_t _nbFct;
+    static constexpr size_t MAXNBFUNC = 10;
+    uint64_t _seed_tab[MAXNBFUNC];
+    uint64_t _user_seed;
 };
 
-/* alternative hash functor based on xorshift, taking a single hash functor as input.
-we need this 2-functors scheme because HashFunctors won't work with unordered_map.
-(rayan)
-*/
-
-// wrapper around HashFunctors to return only one value instead of 7
+/// Wrapper to return single hash value instead of multiple hashes
 template <typename Item>
-class SingleHashFunctor
-{
-  public:
-	uint64_t operator()(const Item& key, uint64_t seed = 0xAAAAAAAA55555555ULL) const
-	{
-		return hashFunctors.hashWithSeed(key, seed);
-	}
+class SingleHashFunctor {
+public:
+    [[nodiscard]] uint64_t operator()(const Item& key, uint64_t seed = 0xAAAAAAAA55555555ULL) const {
+        return hashFunctors.hashWithSeed(key, seed);
+    }
 
-  private:
-	HashFunctors<Item> hashFunctors;
+private:
+    HashFunctors<Item> hashFunctors;
 };
 
+/// Xorshift-based hash generator using a single hash functor
+/// Based on Xorshift128* by Sebastiano Vigna (public domain)
 template <typename Item, class SingleHasher_t>
-class XorshiftHashFunctors
-{
-	static_assert(
-	    std::is_invocable_r_v<uint64_t, const SingleHasher_t&, const Item&, uint64_t>,
-	    "SingleHasher_t::operator()(const Item&, uint64_t) must be const and return uint64_t");
-	/*  Xorshift128*
-	    Written in 2014 by Sebastiano Vigna (vigna@acm.org)
+class XorshiftHashFunctors {
+    static_assert(
+        std::is_invocable_r_v<uint64_t, const SingleHasher_t&, const Item&, uint64_t>,
+        "SingleHasher_t::operator()(const Item&, uint64_t) must be const and return uint64_t");
 
-	    To the extent possible under law, the author has dedicated all copyright
-	    and related and neighboring rights to this software to the public domain
-	    worldwide. This software is distributed without any warranty.
+    [[nodiscard]] uint64_t next(uint64_t* s) const {
+        uint64_t s1 = s[0];
+        const uint64_t s0 = s[1];
+        s[0] = s0;
+        s1 ^= s1 << 23;
+        return (s[1] = (s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26))) + s0;
+    }
 
-	    See <http://creativecommons.org/publicdomain/zero/1.0/>. */
-	/* This is the fastest generator passing BigCrush without
-	   systematic failures, but due to the relatively short period it is
-	   acceptable only for applications with a mild amount of parallelism;
-	   otherwise, use a xorshift1024* generator.
+public:
+    [[nodiscard]] uint64_t h0(hash_pair_t& s, const Item& key) const {
+        s[0] = singleHasher(key, 0xAAAAAAAA55555555ULL);
+        return s[0];
+    }
 
-	   The state must be seeded so that it is not everywhere zero. If you have
-	   a nonzero 64-bit seed, we suggest to pass it twice through
-	   MurmurHash3's avalanching function. */
+    [[nodiscard]] uint64_t h1(hash_pair_t& s, const Item& key) const {
+        s[1] = singleHasher(key, 0x33333333CCCCCCCCULL);
+        return s[1];
+    }
 
-	//  uint64_t s[ 2 ];
+    [[nodiscard]] uint64_t next(hash_pair_t& s) const {
+        uint64_t s1 = s[0];
+        const uint64_t s0 = s[1];
+        s[0] = s0;
+        s1 ^= s1 << 23;
+        return (s[1] = (s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26))) + s0;
+    }
 
-	uint64_t next(uint64_t* s) const
-	{
-		uint64_t s1 = s[0];
-		const uint64_t s0 = s[1];
-		s[0] = s0;
-		s1 ^= s1 << 23;                                           // a
-		return (s[1] = (s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26))) + s0; // b, c
-	}
+    [[nodiscard]] hash_set_t operator()(const Item& key) const {
+        uint64_t s[2];
+        hash_set_t hset;
 
-  public:
-	uint64_t h0(hash_pair_t& s, const Item& key) const
-	{
-		s[0] = singleHasher(key, 0xAAAAAAAA55555555ULL);
-		return s[0];
-	}
+        hset[0] = singleHasher(key, 0xAAAAAAAA55555555ULL);
+        hset[1] = singleHasher(key, 0x33333333CCCCCCCCULL);
+        s[0] = hset[0];
+        s[1] = hset[1];
 
-	uint64_t h1(hash_pair_t& s, const Item& key) const
-	{
-		s[1] = singleHasher(key, 0x33333333CCCCCCCCULL);
-		return s[1];
-	}
+        for (size_t ii = 2; ii < 10; ++ii) {
+            hset[ii] = next(s);
+        }
+        return hset;
+    }
 
-	// return next hash an update state s
-	uint64_t next(hash_pair_t& s) const
-	{
-		uint64_t s1 = s[0];
-		const uint64_t s0 = s[1];
-		s[0] = s0;
-		s1 ^= s1 << 23;                                           // a
-		return (s[1] = (s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26))) + s0; // b, c
-	}
-
-	// this one returns all the  hashes
-	hash_set_t operator()(const Item& key) const
-	{
-		uint64_t s[2];
-
-		hash_set_t hset;
-
-		hset[0] = singleHasher(key, 0xAAAAAAAA55555555ULL);
-		hset[1] = singleHasher(key, 0x33333333CCCCCCCCULL);
-
-		s[0] = hset[0];
-		s[1] = hset[1];
-
-		for (size_t ii = 2; ii < 10 /* it's much better have a constant here, for inlining; this loop is super performance critical*/; ii++)
-		{
-			hset[ii] = next(s);
-		}
-
-		return hset;
-	}
-
-  private:
-	SingleHasher_t singleHasher;
+private:
+    SingleHasher_t singleHasher;
 };
 
 ////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark iterators
+// Iterators
 ////////////////////////////////////////////////////////////////
 
+/// Range wrapper for iterators
 template <typename Iterator>
-struct iter_range
-{
-	iter_range(Iterator b, Iterator e)
-	    : m_begin(b), m_end(e)
-	{
-	}
+struct iter_range {
+    iter_range(Iterator b, Iterator e) : m_begin(b), m_end(e) {}
 
-	Iterator begin() const
-	{
-		return m_begin;
-	}
+    [[nodiscard]] Iterator begin() const { return m_begin; }
+    [[nodiscard]] Iterator end() const { return m_end; }
 
-	Iterator end() const
-	{
-		return m_end;
-	}
-
-	Iterator m_begin, m_end;
+    Iterator m_begin, m_end;
 };
 
 template <typename Iterator>
-iter_range<Iterator> range(Iterator begin, Iterator end)
-{
-	return iter_range<Iterator>(begin, end);
+[[nodiscard]] iter_range<Iterator> range(Iterator begin, Iterator end) {
+    return iter_range<Iterator>(begin, end);
 }
 
 ////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark level
+// Level structure
 ////////////////////////////////////////////////////////////////
 
-inline uint64_t fastrange64(const uint64_t word, const uint64_t p)
-{
-	// todo: Use compile-time optimizations
-	return word % p;
+[[nodiscard]] inline uint64_t fastrange64(uint64_t word, uint64_t p) {
+    return word % p;
 }
 
-class level
-{
-  public:
-	level() = default;
-	~level() = default;
+class level {
+public:
+    level() = default;
+    ~level() = default;
 
-	uint64_t get(uint64_t hash_raw) const
-	{
-		//	uint64_t hashi =    hash_raw %  hash_domain; //
-		// uint64_t hashi = (uint64_t)(  ((__uint128_t) hash_raw * (__uint128_t) hash_domain) >> 64ULL);
-		uint64_t hashi = fastrange64(hash_raw, hash_domain);
-		return bitset.get(hashi);
-	}
+    [[nodiscard]] uint64_t get(uint64_t hash_raw) const {
+        const uint64_t hashi = fastrange64(hash_raw, hash_domain);
+        return bitset.get(hashi);
+    }
 
-	uint64_t idx_begin;
-	uint64_t hash_domain;
-	bitVector bitset;
+    uint64_t idx_begin{0};
+    uint64_t hash_domain{0};
+    bitVector bitset;
 };
 
 ////////////////////////////////////////////////////////////////
-// #pragma mark -
-// #pragma mark mphf
+// Threading
 ////////////////////////////////////////////////////////////////
 
-#define NBBUFF 10000
-// #define NBBUFF 2
+constexpr int NBBUFF = 10000;
 
 template <typename Range, typename Iterator>
-struct thread_args
-{
-	void* boophf;
-	Range const* range;
-	std::shared_ptr<void> it_p;    /* used to be "Iterator it" but because of fastmode, iterator is polymorphic; TODO: think about whether it should be a unique_ptr actually */
-	std::shared_ptr<void> until_p; /* to cache the "until" variable */
-	int level;
+struct thread_args {
+    void* boophf;
+    const Range* range;
+    std::shared_ptr<void> it_p;
+    std::shared_ptr<void> until_p;
+    int level;
 };
 
-// forward declaration
-
+// Forward declaration
 template <typename elem_t, typename Hasher_t, typename Range, typename it_type>
 void thread_processLevel(thread_args<Range, it_type>* targ);
 
-/* Hasher_t returns a single hash when operator()(elem_t key) is called.
-   if used with XorshiftHashFunctors, it must have the following operator: operator()(elem_t key, uint64_t seed) */
+/// Minimal perfect hash function
+/// Hasher_t returns a single hash when operator()(elem_t key) is called
 template <typename elem_t, typename Hasher_t>
-class mphf
-{
+class mphf {
+    using MultiHasher_t = XorshiftHashFunctors<elem_t, Hasher_t>;
 
-	/* this mechanisms gets P hashes out of Hasher_t */
-	typedef XorshiftHashFunctors<elem_t, Hasher_t> MultiHasher_t;
-	// typedef HashFunctors<elem_t> MultiHasher_t; // original code (but only works for int64 keys)  (seems to be as fast as the current xorshift)
-	// typedef IndepHashFunctors<elem_t,Hasher_t> MultiHasher_t; //faster than xorshift
+public:
+    mphf() : _built(false) {}
+    ~mphf() = default;
 
-  public:
-	mphf() : _built(false)
-	{
-	}
+    /// Construct MPHF from input range
+    template <typename Range>
+    mphf(uint64_t n, const Range& input_range, int num_thread = 1, double gamma = 2.0, 
+         bool writeEach = true, bool progress = true, float perc_elem_loaded = 0.03) 
+        : _gamma(gamma), 
+          _hash_domain(static_cast<uint64_t>(std::ceil(static_cast<double>(n) * gamma))), 
+          _nelem(n), 
+          _num_thread(num_thread), 
+          _percent_elem_loaded_for_fastMode(perc_elem_loaded), 
+          _withprogress(progress) {
+        
+        if (n == 0) {
+            return;
+        }
 
-	~mphf()
-	{
-	}
+        _fastmode = (_percent_elem_loaded_for_fastMode > 0.0);
+        _writeEachLevel = writeEach;
+        
+        if (writeEach) {
+            _fastmode = false;
+        }
 
-	// allow perc_elem_loaded  elements to be loaded in ram for faster construction (default 3%), set to 0 to desactivate
-	template <typename Range>
-	mphf(uint64_t n, Range const& input_range, int num_thread = 1, double gamma = 2.0, bool writeEach = true, bool progress = true, float perc_elem_loaded = 0.03) : _gamma(gamma), _hash_domain(static_cast<uint64_t>(ceil(double(n) * gamma))), _nelem(n), _num_thread(num_thread), _percent_elem_loaded_for_fastMode(perc_elem_loaded), _withprogress(progress)
-	{
-		if (n == 0)
-			return;
+        setup();
 
-		_fastmode = false;
+        if (_withprogress) {
+            _progressBar.timer_mode = 1;
 
-		if (_percent_elem_loaded_for_fastMode > 0.0)
-			_fastmode = true;
+            const double total_raw = _nb_levels;
+            const double sum_geom_read = 1.0 / (1.0 - _proba_collision);
+            const double total_writeEach = sum_geom_read + 1.0;
+            const double total_fastmode_ram = (_fastModeLevel + 1) + 
+                (std::pow(_proba_collision, _fastModeLevel)) * (_nb_levels - (_fastModeLevel + 1));
 
-		if (writeEach)
-		{
-			_writeEachLevel = true;
-			_fastmode = false;
-		}
-		else
-		{
-			_writeEachLevel = false;
-		}
+            std::printf("for info, total work write each  : %.3f    total work inram from level %i : %.3f  total work raw : %.3f \n", 
+                       total_writeEach, _fastModeLevel, total_fastmode_ram, total_raw);
 
-		setup();
+            if (writeEach) {
+                _progressBar.init(_nelem * total_writeEach, "Building BooPHF", num_thread);
+            } else if (_fastmode) {
+                _progressBar.init(_nelem * total_fastmode_ram, "Building BooPHF", num_thread);
+            } else {
+                _progressBar.init(_nelem * _nb_levels, "Building BooPHF", num_thread);
+            }
+        }
 
-		if (_withprogress)
-		{
-			_progressBar.timer_mode = 1;
+        uint64_t offset = 0;
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            _tempBitset = new bitVector(_levels[ii].hash_domain);
+            processLevel(input_range, ii);
+            _levels[ii].bitset.clearCollisions(0, _levels[ii].hash_domain, _tempBitset);
+            offset = _levels[ii].bitset.build_ranks(offset);
+            delete _tempBitset;
+        }
 
-			double total_raw = _nb_levels;
+        if (_withprogress) {
+            _progressBar.finish_threaded();
+        }
 
-			double sum_geom_read = (1.0 / (1.0 - _proba_collision));
-			double total_writeEach = sum_geom_read + 1.0;
+        _lastbitsetrank = offset;
+        std::vector<elem_t>().swap(setLevelFastmode);
+        
+        std::lock_guard<std::mutex> lock(_mutex);
+        _built = true;
+    }
 
-			double total_fastmode_ram = (_fastModeLevel + 1) + (pow(_proba_collision, _fastModeLevel)) * (_nb_levels - (_fastModeLevel + 1));
+    /// Lookup hash value for an element
+    [[nodiscard]] uint64_t lookup(const elem_t& elem) const {
+        if (!_built) {
+            return ULLONG_MAX;
+        }
 
-			printf("for info, total work write each  : %.3f    total work inram from level %i : %.3f  total work raw : %.3f \n", total_writeEach, _fastModeLevel, total_fastmode_ram, total_raw);
+        hash_pair_t bbhash;
+        int level;
+        const uint64_t level_hash = getLevel(bbhash, elem, &level);
 
-			if (writeEach)
-			{
-				_progressBar.init(_nelem * total_writeEach, "Building BooPHF", num_thread);
-			}
-			else if (_fastmode)
-				_progressBar.init(_nelem * total_fastmode_ram, "Building BooPHF", num_thread);
-			else
-				_progressBar.init(_nelem * _nb_levels, "Building BooPHF", num_thread);
-		}
+        if (level == (_nb_levels - 1)) {
+            const auto in_final_map = _final_hash.find(elem);
+            if (in_final_map == _final_hash.end()) {
+                return ULLONG_MAX;  // Element not in original set
+            }
+            return in_final_map->second + _lastbitsetrank;
+        }
 
-		uint64_t offset = 0;
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			_tempBitset = new bitVector(_levels[ii].hash_domain); // temp collision bitarray for this level
+        const uint64_t non_minimal_hp = fastrange64(level_hash, _levels[level].hash_domain);
+        return _levels[level].bitset.rank(non_minimal_hp);
+    }
 
-			processLevel(input_range, ii);
+    [[nodiscard]] uint64_t nbKeys() const noexcept { return _nelem; }
 
-			_levels[ii].bitset.clearCollisions(0, _levels[ii].hash_domain, _tempBitset);
+    uint64_t totalBitSize() {
+        uint64_t totalsizeBitset = 0;
+        for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
+            totalsizeBitset += _levels[ii].bitset.bitSize();
+        }
 
-			offset = _levels[ii].bitset.build_ranks(offset);
+        const uint64_t totalsize = totalsizeBitset + _final_hash.size() * 42 * 8;
 
-			delete _tempBitset;
-		}
-
-		if (_withprogress)
-			_progressBar.finish_threaded();
-
-		_lastbitsetrank = offset;
-
-		// printf("used temp ram for construction : %lli MB \n",setLevelFastmode.capacity()* sizeof(elem_t) /1024ULL/1024ULL);
-
-		std::vector<elem_t>().swap(setLevelFastmode); // clear setLevelFastmode reallocating
-		std::lock_guard<std::mutex> lock(_mutex);
-		_built = true;
-	}
-
-	uint64_t lookup(const elem_t& elem) const
-	{
-		if (!_built)
-			return ULLONG_MAX;
-
-		// auto hashes = _hasher(elem);
-		uint64_t non_minimal_hp, minimal_hp;
-
-		hash_pair_t bbhash;
-		int level;
-		uint64_t level_hash = getLevel(bbhash, elem, &level);
-
-		if (level == (_nb_levels - 1))
-		{
-			auto in_final_map = _final_hash.find(elem);
-			if (in_final_map == _final_hash.end())
-			{
-				// elem was not in orignal set of keys
-				return ULLONG_MAX; //  means elem not in set
-			}
-			else
-			{
-				minimal_hp = in_final_map->second + _lastbitsetrank;
-				// printf("lookup %llu  level %i   --> %llu \n",elem,level,minimal_hp);
-
-				return minimal_hp;
-			}
-			//				minimal_hp = _final_hash[elem] + _lastbitsetrank;
-			//				return minimal_hp;
-		}
-		else
-		{
-			// non_minimal_hp =  level_hash %  _levels[level].hash_domain; // in fact non minimal hp would be  + _levels[level]->idx_begin
-			non_minimal_hp = fastrange64(level_hash, _levels[level].hash_domain);
-		}
-		minimal_hp = _levels[level].bitset.rank(non_minimal_hp);
-		//	printf("lookup %llu  level %i   --> %llu \n",elem,level,minimal_hp);
-
-		return minimal_hp;
-	}
-
-	uint64_t nbKeys() const
-	{
-		return _nelem;
-	}
-
-	uint64_t totalBitSize()
-	{
-
-		uint64_t totalsizeBitset = 0;
-		for (uint32_t ii = 0; ii < _nb_levels; ii++)
-		{
-			totalsizeBitset += _levels[ii].bitset.bitSize();
-		}
-
-		uint64_t totalsize = totalsizeBitset + _final_hash.size() * 42 * 8; // unordered map takes approx 42B per elem [personal test] (42B with uint64_t key, would be larger for other type of elem)
-
-		printf("Bitarray    %" PRIu64 "  bits (%.2f %%)   (array + ranks )\n",
-		       totalsizeBitset, 100 * (float)totalsizeBitset / totalsize);
-		printf("Last level hash  %12lu  bits (%.2f %%) (nb in last level hash %lu)\n",
-		       _final_hash.size() * 42 * 8, 100 * (float)(_final_hash.size() * 42 * 8) / totalsize,
-		       _final_hash.size());
-		return totalsize;
-	}
+        std::printf("Bitarray    %" PRIu64 "  bits (%.2f %%)   (array + ranks )\n",
+               totalsizeBitset, 100 * static_cast<float>(totalsizeBitset) / totalsize);
+        std::printf("Last level hash  %12lu  bits (%.2f %%) (nb in last level hash %lu)\n",
+               _final_hash.size() * 42 * 8, 100 * static_cast<float>(_final_hash.size() * 42 * 8) / totalsize,
+               _final_hash.size());
+        return totalsize;
+    }
 
 	template <typename Iterator> // typename Range,
 	void pthread_processLevel(std::vector<elem_t>& buffer, std::shared_ptr<Iterator> shared_it, std::shared_ptr<Iterator> until_p, int i)
