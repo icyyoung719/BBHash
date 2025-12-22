@@ -7,6 +7,7 @@
 #include <ostream>
 #include <stdint.h>
 #include <vector>
+#include "endian_utils.hpp"
 
 inline uint32_t popcount_32(uint32_t x)
 {
@@ -251,25 +252,38 @@ class bitVector
 
 	void save(std::ostream& os) const
 	{
-		os.write(reinterpret_cast<char const*>(&_size), sizeof(_size));
-		os.write(reinterpret_cast<char const*>(&_nchar), sizeof(_nchar));
-		os.write(reinterpret_cast<char const*>(_bitArray), (std::streamsize)(sizeof(uint64_t) * _nchar));
+		boomphf::write_le(os, _size);
+		boomphf::write_le(os, _nchar);
+		
+		// Save bit array - need to convert atomic uint64_t to regular uint64_t first
+		std::vector<uint64_t> temp_array(_nchar);
+		for (size_t i = 0; i < _nchar; ++i) {
+			temp_array[i] = _bitArray[i].load(std::memory_order_relaxed);
+		}
+		boomphf::write_le_array(os, temp_array.data(), _nchar);
+		
 		uint64_t sizer = _ranks.size();
-		os.write(reinterpret_cast<char const*>(&sizer), sizeof(uint64_t));
-		os.write(reinterpret_cast<char const*>(_ranks.data()), (std::streamsize)(sizeof(_ranks[0]) * _ranks.size()));
+		boomphf::write_le(os, sizer);
+		boomphf::write_le_array(os, _ranks.data(), _ranks.size());
 	}
 
 	void load(std::istream& is)
 	{
-		is.read(reinterpret_cast<char*>(&_size), sizeof(_size));
-		is.read(reinterpret_cast<char*>(&_nchar), sizeof(_nchar));
+		boomphf::read_le(is, _size);
+		boomphf::read_le(is, _nchar);
 		this->resize(_size);
-		is.read(reinterpret_cast<char*>(_bitArray), (std::streamsize)(sizeof(uint64_t) * _nchar));
+		
+		// Load bit array - read into temp buffer then copy to atomic array
+		std::vector<uint64_t> temp_array(_nchar);
+		boomphf::read_le_array(is, temp_array.data(), _nchar);
+		for (size_t i = 0; i < _nchar; ++i) {
+			_bitArray[i].store(temp_array[i], std::memory_order_relaxed);
+		}
 
 		uint64_t sizer;
-		is.read(reinterpret_cast<char*>(&sizer), sizeof(uint64_t));
+		boomphf::read_le(is, sizer);
 		_ranks.resize(sizer);
-		is.read(reinterpret_cast<char*>(_ranks.data()), (std::streamsize)(sizeof(_ranks[0]) * _ranks.size()));
+		boomphf::read_le_array(is, _ranks.data(), _ranks.size());
 	}
 
   protected:

@@ -1,6 +1,6 @@
 # CC=/usr/bin/g++
 CXX ?= g++
-CFLAGS = -O3 -std=c++11 -lpthread
+CFLAGS = -O3 -std=c++17 -lpthread
 EXEC=Bootest example example_custom_hash
 all: $(EXEC)
 
@@ -12,7 +12,7 @@ ifeq ($(deb),1)
 endif
 
 ifeq ($(sani),1)
- CFLAGS= -std=c++11 -lpthread -fsanitize=address -fno-omit-frame-pointer -O1 -fno-optimize-sibling-calls -g
+ CFLAGS= -std=c++17 -lpthread -fsanitize=address -fno-omit-frame-pointer -O1 -fno-optimize-sibling-calls -g
 endif
 
 .PHONY: test clean
