@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include <sys/time.h>
+#include <chrono>
 #include <random>
 #include <algorithm>
 
@@ -86,12 +86,10 @@ int main (int argc, char* argv[]){
 	
 	
 	boophf_t * bphf = NULL;
-	double t_begin,t_end; struct timeval timet;
 	
+	printf("Construct a BooPHF with  %llu elements  \n",nelem);
 	
-	printf("Construct a BooPHF with  %lli elements  \n",nelem);
-	
-	gettimeofday(&timet, NULL); t_begin = timet.tv_sec +(timet.tv_usec/1000000.0);
+	auto t_begin = std::chrono::high_resolution_clock::now();
 	
 	// mphf takes as input a c++ range. A simple array of keys can be wrapped with boomphf::range
 	// but could be from a user defined iterator (enabling keys to be read from a file or from some complex non-contiguous structure)
@@ -103,8 +101,8 @@ int main (int argc, char* argv[]){
 	//build the mphf
 	bphf = new boomphf::mphf<uint64_t,Custom_uint64_Hasher>(nelem,data_iterator,nthreads,gammaFactor);
 	
-	gettimeofday(&timet, NULL); t_end = timet.tv_sec +(timet.tv_usec/1000000.0);
-	double elapsed = t_end - t_begin;
+	auto t_end = std::chrono::high_resolution_clock::now();
+	double elapsed = std::chrono::duration<double>(t_end - t_begin).count();
 	
 	
 	printf("BooPHF constructed perfect hash for %llu keys in %.2fs\n", nelem,elapsed);

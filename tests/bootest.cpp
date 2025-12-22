@@ -1,10 +1,10 @@
-﻿#include "BooPHF.h"
+#include "BooPHF.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include <sys/time.h>
+#include <chrono>
 #include <random>
 #include <algorithm>
 #include <climits>
@@ -14,10 +14,6 @@
 #include <thread>
 #include <math.h>
 #include <inttypes.h>
-
-
-
-//#include <chrono>
 
 
 uint64_t *data;
@@ -35,9 +31,9 @@ using namespace std;
 
 
 inline double get_time_usecs() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return double(tv.tv_sec) * 1000000 + double(tv.tv_usec);
+	auto now = std::chrono::high_resolution_clock::now();
+	auto duration = now.time_since_epoch();
+	return std::chrono::duration<double, std::micro>(duration).count();
 }
 
 
@@ -594,8 +590,8 @@ int main (int argc, char* argv[]){
 	
 	if(buckets){
 		clock_t begin, end;
-		double t_begin,t_end; struct timeval timet;
-		gettimeofday(&timet, NULL); t_begin = timet.tv_sec +(timet.tv_usec/1000000.0);
+		
+		auto t_begin = std::chrono::high_resolution_clock::now();
 
 		
 		for(uint i(0);i<nBuckets;++i){
@@ -658,9 +654,9 @@ int main (int argc, char* argv[]){
 		for(uint i(0);i<nBuckets;++i){
 			remove(("bucket"+to_string(i)).c_str());
 		}
-		gettimeofday(&timet, NULL); t_end = timet.tv_sec +(timet.tv_usec/1000000.0);
+		auto t_end = std::chrono::high_resolution_clock::now();
 
-		double elapsed = t_end - t_begin;
+		double elapsed = std::chrono::duration<double>(t_end - t_begin).count();
 
 		printf("BooPHF constructed perfect hash for %" PRIu64 " keys in %.2fs\n", nelem,elapsed);
 		// cin.get();
@@ -756,13 +752,12 @@ int main (int argc, char* argv[]){
 
 
 	clock_t begin, end;
-	double t_begin,t_end; struct timeval timet;
 
 	if(!load_mphf){
 		printf("Construct a BooPHF with  %" PRIu64 " elements  \n",nelem);
 		///create the boophf
 
-		gettimeofday(&timet, NULL); t_begin = timet.tv_sec +(timet.tv_usec/1000000.0);
+		auto t_begin = std::chrono::high_resolution_clock::now();
 
 		//MPHF CREATION
 		if (on_the_fly)
@@ -781,9 +776,9 @@ int main (int argc, char* argv[]){
 			bphf = new boomphf::mphf<uint64_t,hasher_t>(nelem,data_iterator,nthreads,gammaFactor,write_each);
 		}
 
-		gettimeofday(&timet, NULL); t_end = timet.tv_sec +(timet.tv_usec/1000000.0);
+		auto t_end = std::chrono::high_resolution_clock::now();
 
-		double elapsed = t_end - t_begin;
+		double elapsed = std::chrono::duration<double>(t_end - t_begin).count();
 
 
 		printf("BooPHF constructed perfect hash for %" PRIu64 " keys in %.2fs\n", nelem,elapsed);
@@ -796,13 +791,13 @@ int main (int argc, char* argv[]){
 
 		printf("Loading a BooPHF with  %" PRIu64 " elements  \n",nelem);
 
-		gettimeofday(&timet, NULL); t_begin = timet.tv_sec +(timet.tv_usec/1000000.0);
+		auto t_begin = std::chrono::high_resolution_clock::now();
 
 		std::ifstream is(output_filename, std::ios::binary);
 		bphf->load(is);
 
-		gettimeofday(&timet, NULL); t_end = timet.tv_sec +(timet.tv_usec/1000000.0);
-		double elapsed = t_end - t_begin;
+		auto t_end = std::chrono::high_resolution_clock::now();
+		double elapsed = std::chrono::duration<double>(t_end - t_begin).count();
 
 		printf("BooPHF re-loaded perfect hash for %" PRIu64 " keys in %.2fs\n", nelem,elapsed);
 		printf("boophf  bits/elem : %f\n",(float) (bphf->totalBitSize())/nelem);
