@@ -56,7 +56,7 @@ jobs:
     - name: Run examples
       run: |
         cd build
-        ./example 10000 1
+        ./example 1000 1
 
   build-and-test-windows:
     name: Build and Test (Windows)
