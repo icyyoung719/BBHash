@@ -38,15 +38,20 @@ add_executable(example examples/example.cpp)
 add_executable(example_custom_hash examples/example_custom_hash.cpp)
 add_executable(main examples/main.cpp)
 
+# Tests
+add_executable(test_endian tests/test_endian.cpp)
+add_executable(test_min tests/test_min.cpp)
+
 # Link pthread on non-Windows platforms
 if (NOT MSVC)
   target_link_libraries(example pthread)
   target_link_libraries(example_custom_hash pthread)
   target_link_libraries(main pthread)
+  target_link_libraries(test_endian pthread)
+  target_link_libraries(test_min pthread)
 endif()
 
-# Note: Tests have compilation issues and will be fixed in a future update
-# Tests would be built with:
+# Note: bootest.cpp has compilation issues and will be fixed in a future update
+# It would be built with:
 # add_executable(bootest tests/bootest.cpp)
-# add_executable(test_endian tests/test_endian.cpp)
-# add_executable(test_min tests/test_min.cpp)
+# target_link_libraries(bootest pthread)

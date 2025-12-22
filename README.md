@@ -74,7 +74,7 @@ The project uses CMake as the build system. To build the project:
     cmake ..
     cmake --build .
     
-This will build the example executables in the `build/` directory.
+This will build the example executables and tests in the `build/` directory.
 
 ## Running examples
 
@@ -89,16 +89,26 @@ Example executables are located in the `examples/` directory and can be run afte
     # Run the main example
     ./main
 
+## Running tests
+
+Test executables are located in the `tests/` directory and can be run after building:
+
+    # Run the endianness test (cross-platform serialization)
+    ./test_endian
+    
+    # Run the minimal test (requires specific CSV file)
+    ./test_min
+
 ## Project structure
 
 - `include/` - Header files (BooPHF.h, bitvector.hpp, etc.)
 - `examples/` - Example programs demonstrating library usage
-- `tests/` - Test programs (currently have compilation issues, to be fixed)
+- `tests/` - Test programs
 - `build/` - CMake build directory (created when building)
 
 # Original BBHash documentation
 
-File Bootest.cpp contains more options, use ./Bootest with  -check to check correctness of the hash function, and -bench to benchmark lookup performance.
+File bootest.cpp contains more options, use ./bootest with -check to check correctness of the hash function, and -bench to benchmark lookup performance (note: currently has compilation issues).
     
 Here is a sample output :
     
