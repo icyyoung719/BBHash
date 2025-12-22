@@ -8,8 +8,7 @@
 namespace boomphf {
 
 /// Runtime endianness check
-[[nodiscard]] constexpr bool is_system_little_endian() noexcept {
-    // C++20 has std::endian, but for C++17 we use runtime check
+[[nodiscard]] inline bool is_system_little_endian() noexcept {
     constexpr uint32_t test = 0x01020304;
     const auto* bytes = reinterpret_cast<const uint8_t*>(&test);
     return bytes[0] == 0x04;

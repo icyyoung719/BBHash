@@ -548,9 +548,9 @@ public:
         const uint64_t final_hash_size = _final_hash.size();
         write_le(os, final_hash_size);
 
-        for (const auto& [key, value] : _final_hash) {
-            write_le(os, key);
-            write_le(os, value);
+        for (const auto& kv_pair : _final_hash) {
+            write_le(os, kv_pair.first);
+            write_le(os, kv_pair.second);
         }
     }
 
