@@ -7,6 +7,7 @@
 #include <chrono>
 #include <random>
 #include <algorithm>
+#include <inttypes.h>
 
 using namespace std;
 
@@ -79,7 +80,7 @@ int main (int argc, char* argv[]){
 		if (data[ii] != data[jj])
 			data[++jj] = data[ii];
 	}
-	printf("found %lli duplicated items  \n",nelem+rab-(jj + 1) );
+	printf("found %" PRIu64 " duplicated items  \n",nelem+rab-(jj + 1) );
 	
 	//////////////////
 	// at this point, array data contains a set of nelem random unique keys
@@ -87,7 +88,7 @@ int main (int argc, char* argv[]){
 	
 	boophf_t * bphf = NULL;
 	
-	printf("Construct a BooPHF with  %llu elements  \n",nelem);
+	printf("Construct a BooPHF with  %" PRIu64 " elements  \n",nelem);
 	
 	auto t_begin = std::chrono::high_resolution_clock::now();
 	
@@ -105,12 +106,12 @@ int main (int argc, char* argv[]){
 	double elapsed = std::chrono::duration<double>(t_end - t_begin).count();
 	
 	
-	printf("BooPHF constructed perfect hash for %llu keys in %.2fs\n", nelem,elapsed);
+	printf("BooPHF constructed perfect hash for %" PRIu64 " keys in %.2fs\n", nelem,elapsed);
 	printf("boophf  bits/elem : %f\n",(float) (bphf->totalBitSize())/nelem);
 	
 	//query mphf like this
 	uint64_t  idx = bphf->lookup(data[0]);
-	printf(" example query  %lli ----->  %llu \n",data[0],idx);
+	printf(" example query  %" PRIu64 " ----->  %" PRIu64 " \n",data[0],idx);
 	
 	free(data);
 	delete bphf;
