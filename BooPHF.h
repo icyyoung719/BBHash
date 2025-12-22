@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "bitvector.hpp"
+#include "endian_utils.hpp"
 #include "platform_time.h"
 #include "progress.hpp"
 
@@ -721,11 +722,11 @@ class mphf
 
 	void save(std::ostream& os) const
 	{
-
-		os.write(reinterpret_cast<char const*>(&_gamma), sizeof(_gamma));
-		os.write(reinterpret_cast<char const*>(&_nb_levels), sizeof(_nb_levels));
-		os.write(reinterpret_cast<char const*>(&_lastbitsetrank), sizeof(_lastbitsetrank));
-		os.write(reinterpret_cast<char const*>(&_nelem), sizeof(_nelem));
+		boomphf::write_le(os, _gamma);
+		boomphf::write_le(os, _nb_levels);
+		boomphf::write_le(os, _lastbitsetrank);
+		boomphf::write_le(os, _nelem);
+		
 		for (uint32_t ii = 0; ii < _nb_levels; ii++)
 		{
 			_levels[ii].bitset.save(os);
@@ -733,24 +734,24 @@ class mphf
 
 		// save final hash
 		uint64_t final_hash_size = _final_hash.size();
-
-		os.write(reinterpret_cast<char const*>(&final_hash_size), sizeof(uint64_t));
+		boomphf::write_le(os, final_hash_size);
 
 		// typename std::unordered_map<elem_t,uint64_t,Hasher_t>::iterator
 		for (auto it = _final_hash.begin(); it != _final_hash.end(); ++it)
 		{
-			os.write(reinterpret_cast<char const*>(&(it->first)), sizeof(elem_t));
-			os.write(reinterpret_cast<char const*>(&(it->second)), sizeof(uint64_t));
+			elem_t key = it->first;
+			uint64_t value = it->second;
+			boomphf::write_le(os, key);
+			boomphf::write_le(os, value);
 		}
 	}
 
 	void load(std::istream& is)
 	{
-
-		is.read(reinterpret_cast<char*>(&_gamma), sizeof(_gamma));
-		is.read(reinterpret_cast<char*>(&_nb_levels), sizeof(_nb_levels));
-		is.read(reinterpret_cast<char*>(&_lastbitsetrank), sizeof(_lastbitsetrank));
-		is.read(reinterpret_cast<char*>(&_nelem), sizeof(_nelem));
+		boomphf::read_le(is, _gamma);
+		boomphf::read_le(is, _nb_levels);
+		boomphf::read_le(is, _lastbitsetrank);
+		boomphf::read_le(is, _nelem);
 
 		_levels.resize(_nb_levels);
 
@@ -779,15 +780,15 @@ class mphf
 		_final_hash.clear();
 		uint64_t final_hash_size;
 
-		is.read(reinterpret_cast<char*>(&final_hash_size), sizeof(uint64_t));
+		boomphf::read_le(is, final_hash_size);
 
 		for (uint64_t ii = 0; ii < final_hash_size; ii++)
 		{
 			elem_t key;
 			uint64_t value;
 
-			is.read(reinterpret_cast<char*>(&key), sizeof(elem_t));
-			is.read(reinterpret_cast<char*>(&value), sizeof(uint64_t));
+			boomphf::read_le(is, key);
+			boomphf::read_le(is, value);
 
 			_final_hash[key] = value;
 		}
