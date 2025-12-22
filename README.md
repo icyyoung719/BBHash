@@ -65,13 +65,38 @@ Here is a simple example showing how to build and query a mphf with input keys i
 # Types supported
 The master branch works with Plain Old Data types only (POD). To work with other types, use the "alltypes" branch (it runs slighlty slower). The alltypes branch includes a sample code with strings. The "internal_hash" branch allows to work with types that do not support copy or assignment operators, at the expense of using 128bits/key in I/O operations regardless of the actual key size. Thus, if your keys are 64 bits integers, "internal_hash" will do twice more I/Os. But if your keys are longer than 128 bits, then "internal_hash" branch will be faster than the master branch.
 
-# How to run test
+# How to build and run
 
-A sample usage is provided in file example.cpp, compile and run with: ( params are nb_elements nb_threads)
+The project uses CMake as the build system. To build the project:
 
-    make
+    mkdir build
+    cd build
+    cmake ..
+    cmake --build .
+    
+This will build the example executables in the `build/` directory.
+
+## Running examples
+
+Example executables are located in the `examples/` directory and can be run after building:
+
+    # Run the basic example (params are nb_elements nb_threads)
     ./example 100000000 1
     
+    # Run the custom hash example
+    ./example_custom_hash 100000000 1
+    
+    # Run the main example
+    ./main
+
+## Project structure
+
+- `include/` - Header files (BooPHF.h, bitvector.hpp, etc.)
+- `examples/` - Example programs demonstrating library usage
+- `tests/` - Test programs (currently have compilation issues, to be fixed)
+- `build/` - CMake build directory (created when building)
+
+# Original BBHash documentation
 
 File Bootest.cpp contains more options, use ./Bootest with  -check to check correctness of the hash function, and -bench to benchmark lookup performance.
     
