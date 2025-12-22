@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test-linux:
+    name: Build and Test (Ubuntu)
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Release, Debug]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup build environment
+      run: |
+        if [ "${{ matrix.compiler }}" = "clang" ]; then
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+        else
+          echo "CC=gcc" >> $GITHUB_ENV
+          echo "CXX=g++" >> $GITHUB_ENV
+        fi
+    
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . -j$(nproc)
+    
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+    
+    - name: Run examples
+      run: |
+        cd build
+        ./example 10000 1
+
+  build-and-test-windows:
+    name: Build and Test (Windows)
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config ${{ matrix.build_type }}
+    
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure --verbose -C ${{ matrix.build_type }}
+
+  build-and-test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-latest
+    
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . -j$(sysctl -n hw.ncpu)
+    
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+    
+    - name: Run examples
+      run: |
+        cd build
+        ./example 10000 1

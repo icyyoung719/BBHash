@@ -12,6 +12,8 @@ bootest
 example_custom_hash
 main
 test_min
+test_basic
+test_serialization
 
 # Temporary files
 *.tmp
@@ -20,3 +22,7 @@ temp_*.tmp
 # Generated files
 *.mphf
 *.o
+
+# Test artifacts
+Testing/
+test_*.mphf
