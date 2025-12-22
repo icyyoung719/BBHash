@@ -3,7 +3,7 @@
 # Cross-Platform Changes
 [BBhash](https://github.com/rizkg/BBHash) is not cross-platform. It only compiles and works on Linux. So I have forked it and made it cross-platform.
 
-Now this fork can compile on Windows (both x86 and x64) and Linux (x64, have not tested on x86).
+Now this fork can compile on Windows (both x86 and x64) and Linux (x64, also supports x86).
 
 This is a simple description of the build process:
 
@@ -16,6 +16,8 @@ Cross-Platform ensures two things:
 2. The mphf files can be loaded on both platforms
 
 So you can build mphf on one platform, and load/query mphf on **ANY** other platform.
+
+**For detailed information about cross-platform compatibility, see [CROSS_PLATFORM.md](CROSS_PLATFORM.md).**
 
 
 # BBHash
