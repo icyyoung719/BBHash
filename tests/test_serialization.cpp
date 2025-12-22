@@ -3,6 +3,7 @@
 #include <vector>
 #include <fstream>
 #include <cstdio>
+#include <memory>
 
 typedef boomphf::SingleHashFunctor<uint64_t> hasher_t;
 typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
@@ -14,7 +15,7 @@ TEST_CASE("MPHF serialization and deserialization", "[serialization]") {
     }
     
     // Build the MPHF
-    boophf_t* bphf = new boophf_t(data.size(), data, 1, 1.0, false, false);
+    auto bphf = std::make_unique<boophf_t>(data.size(), data, 1, 1.0, false, false);
     
     SECTION("Save and load from file") {
         const char* filename = "test_serialization.mphf";
@@ -28,7 +29,7 @@ TEST_CASE("MPHF serialization and deserialization", "[serialization]") {
         }
         
         // Load from file
-        boophf_t* bphf_load = new boophf_t();
+        auto bphf_load = std::make_unique<boophf_t>();
         {
             std::ifstream is(filename, std::ios::binary);
             REQUIRE(is.is_open());
@@ -47,10 +48,7 @@ TEST_CASE("MPHF serialization and deserialization", "[serialization]") {
         
         // Clean up
         std::remove(filename);
-        delete bphf_load;
     }
-    
-    delete bphf;
 }
 
 TEST_CASE("MPHF serialization with different gamma values", "[serialization][gamma]") {
@@ -62,14 +60,14 @@ TEST_CASE("MPHF serialization with different gamma values", "[serialization][gam
     SECTION("Gamma 2.0") {
         const char* filename = "test_gamma2.mphf";
         
-        boophf_t* bphf = new boophf_t(data.size(), data, 1, 2.0, false, false);
+        auto bphf = std::make_unique<boophf_t>(data.size(), data, 1, 2.0, false, false);
         
         {
             std::ofstream os(filename, std::ios::binary);
             bphf->save(os);
         }
         
-        boophf_t* bphf_load = new boophf_t();
+        auto bphf_load = std::make_unique<boophf_t>();
         {
             std::ifstream is(filename, std::ios::binary);
             bphf_load->load(is);
@@ -80,7 +78,5 @@ TEST_CASE("MPHF serialization with different gamma values", "[serialization][gam
         }
         
         std::remove(filename);
-        delete bphf;
-        delete bphf_load;
     }
 }
