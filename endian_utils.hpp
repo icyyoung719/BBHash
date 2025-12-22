@@ -41,6 +41,8 @@ inline uint64_t byteswap64(uint64_t value) {
 template<typename T>
 inline T to_little_endian(T value) {
     static_assert(std::is_arithmetic<T>::value, "Type must be arithmetic");
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, 
+                  "Only 1, 2, 4, and 8 byte types are supported");
     
     if (is_system_little_endian()) {
         return value;
@@ -63,16 +65,13 @@ inline T to_little_endian(T value) {
         temp = byteswap32(temp);
         std::memcpy(&result, &temp, sizeof(T));
         return result;
-    } else if (sizeof(T) == 8) {
+    } else { // sizeof(T) == 8
         T result;
         uint64_t temp;
         std::memcpy(&temp, &value, sizeof(T));
         temp = byteswap64(temp);
         std::memcpy(&result, &temp, sizeof(T));
         return result;
-    } else {
-        // Unsupported size, just return as is
-        return value;
     }
 }
 
