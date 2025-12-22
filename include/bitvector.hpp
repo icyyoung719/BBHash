@@ -192,7 +192,7 @@ public:
             if ((ii * 64) % NB_BITS_PER_RANK_SAMPLE == 0) {
                 _ranks.push_back(current_rank);
             }
-            current_rank += popcount_64(_bitArray[ii]);
+            current_rank += popcount_64(_bitArray[ii].load(std::memory_order_relaxed));
         }
         return current_rank;
     }
