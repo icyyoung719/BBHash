@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/rizkg/BBHash.svg?branch=master)](https://travis-ci.org/rizkg/BBHash)
+[![CI](https://github.com/icyyoung719/BBHash/actions/workflows/ci.yml/badge.svg)](https://github.com/icyyoung719/BBHash/actions/workflows/ci.yml)
 
 # Cross-Platform Changes
 [BBhash](https://github.com/rizkg/BBHash) is not cross-platform. It only compiles and works on Linux. So I have forked it and made it cross-platform.
@@ -93,13 +93,47 @@ Example executables are located in the `examples/` directory and can be run afte
 
 ## Running tests
 
-Test executables are located in the `tests/` directory and can be run after building:
+The project uses [Catch2](https://github.com/catchorg/Catch2) as the testing framework. Tests can be run individually or using CTest:
 
-    # Run the endianness test (cross-platform serialization)
-    ./test_endian
-    
-    # Run the minimal test (requires specific CSV file)
-    ./test_min
+### Using CTest (recommended)
+
+Run all tests:
+```bash
+cd build
+ctest --output-on-failure
+```
+
+Run with verbose output:
+```bash
+ctest --verbose
+```
+
+### Running individual tests
+
+Test executables are located in the `build/` directory:
+
+```bash
+# Run basic MPHF tests (construction, lookup, gamma values)
+./test_basic
+
+# Run serialization tests (save/load functionality)
+./test_serialization
+
+# Run endianness test (cross-platform serialization)
+./test_endian
+
+# Run the minimal test (requires specific CSV file)
+./test_min
+```
+
+## Continuous Integration
+
+The project uses GitHub Actions for continuous integration. The CI workflow:
+- Tests on Linux (GCC and Clang), Windows, and macOS
+- Runs both Debug and Release builds
+- Executes all tests automatically on push and pull requests
+
+See [.github/workflows/ci.yml](.github/workflows/ci.yml) for details.
 
 ## Project structure
 
