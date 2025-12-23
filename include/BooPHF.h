@@ -479,9 +479,9 @@ public:
                 hash_pair_t bbhash;
                 int level;
                 if (_writeEachLevel) {
-                    getLevel(bbhash, val, &level, i, i - 1);
+                    (void)getLevel(bbhash, val, &level, i, i - 1);
                 } else {
-                    getLevel(bbhash, val, &level, i);
+                    (void)getLevel(bbhash, val, &level, i);
                 }
 
                 if (level == i) {
@@ -671,7 +671,7 @@ private:
     void insertIntoLevel(uint64_t level_hash, int i) {
         const uint64_t hashl = fastrange64(level_hash, _levels[i].hash_domain);
         if (_levels[i].bitset.atomic_test_and_set(hashl)) {
-            _tempBitset->atomic_test_and_set(hashl);
+            (void)_tempBitset->atomic_test_and_set(hashl);
         }
     }
 
