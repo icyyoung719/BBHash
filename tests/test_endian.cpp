@@ -3,7 +3,6 @@
 #include <vector>
 #include <fstream>
 #include <cstdio>
-#include <memory>
 
 typedef boomphf::SingleHashFunctor<uint64_t> hasher_t;
 typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
@@ -17,30 +16,30 @@ void test_endian_serialization(size_t num_keys, double gamma, const std::string&
     }
     
     // Build the MPHF
-    auto bphf = std::make_unique<boophf_t>(data.size(), data, 1, gamma, false, false);
+    boophf_t bphf(data.size(), data, 1, gamma, false, false);
     
     // Save to file
     std::string filename = "test_endian_" + test_name + ".mphf";
     {
         std::ofstream os(filename, std::ios::binary);
         REQUIRE(os.is_open());
-        bphf->save(os);
+        bphf.save(os);
         os.close();
     }
     
     // Load from file
-    auto bphf_load = std::make_unique<boophf_t>();
+    boophf_t bphf_load;
     {
         std::ifstream is(filename, std::ios::binary);
         REQUIRE(is.is_open());
-        bphf_load->load(is);
+        bphf_load.load(is);
         is.close();
     }
     
     // Verify all queries match
     for (size_t i = 0; i < data.size(); i++) {
-        uint64_t idx_orig = bphf->lookup(data[i]);
-        uint64_t idx_load = bphf_load->lookup(data[i]);
+        uint64_t idx_orig = bphf.lookup(data[i]);
+        uint64_t idx_load = bphf_load.lookup(data[i]);
         
         REQUIRE(idx_orig == idx_load);
         REQUIRE(idx_load < data.size());

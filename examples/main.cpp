@@ -12,7 +12,7 @@ int main() {
     std::vector<uint64_t> keys;
     keys.reserve(num_keys);
     
-    std::mt19937_64 rng(42);  // Fixed seed for reproducibility
+    std::mt19937_64 rng(42);  // Fixed seed for reproducible, deterministic output
     for (size_t i = 0; i < num_keys; ++i) {
         keys.push_back(rng());
     }
