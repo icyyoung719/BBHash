@@ -50,7 +50,6 @@ add_executable(main examples/main.cpp)
 
 # Tests
 add_executable(test_endian tests/test_endian.cpp)
-add_executable(test_min tests/test_min.cpp)
 
 # Catch2-based tests
 # Create a library with Catch2 main
@@ -62,6 +61,9 @@ target_link_libraries(test_basic catch_main)
 
 add_executable(test_serialization tests/test_serialization.cpp)
 target_link_libraries(test_serialization catch_main)
+
+add_executable(test_min tests/test_min.cpp)
+target_link_libraries(test_min catch_main)
 
 # Link pthread on non-Windows platforms
 if (NOT MSVC)
