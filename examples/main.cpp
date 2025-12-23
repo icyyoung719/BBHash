@@ -1,59 +1,63 @@
-﻿#include <iostream>
+#include "BooPHF.h"
+#include <iostream>
 #include <vector>
 #include <random>
 #include <chrono>
-#include <cassert>
-// #include "bbhash/MurmurHash3.h"
-// #include "bbhash/bbhash.hpp"
-#include "BooPHF.h"
-
-// 编码 pair<int,int> 为 uint64_t
-inline uint64_t encode_pair(int a, int b) {
-    return (static_cast<uint64_t>(static_cast<uint32_t>(a)) << 32) |
-           static_cast<uint32_t>(b);
-}
 
 int main() {
-    // 生成模拟数据：500万个pair和float值
-    size_t N = 5000000;
-
+    // Simple example demonstrating BBHash usage
+    
+    // 1. Generate some random keys
+    const size_t num_keys = 100000;
     std::vector<uint64_t> keys;
-    keys.reserve(N);
-    std::vector<float> values;
-    values.reserve(N);
-
-    // 随机数生成器
-    std::mt19937 rng(12345);
-    std::uniform_int_distribution<int> dist_int(0, 100000000);
-    std::uniform_real_distribution<float> dist_float(0.0f, 1.0f);
-
-    for (size_t i = 0; i < N; ++i) {
-        int a = dist_int(rng);
-        int b = dist_int(rng);
-        keys.push_back(encode_pair(a, b));
-        values.push_back(dist_float(rng));
+    keys.reserve(num_keys);
+    
+    std::mt19937_64 rng(42);  // Fixed seed for reproducibility
+    for (size_t i = 0; i < num_keys; ++i) {
+        keys.push_back(rng());
     }
-
-    // 构造 BBHash 最小完美哈希
-    double gamma = 2.0; // 构建时的空间/速度权衡参数，2.0较安全
+    
+    std::cout << "Generated " << num_keys << " random keys" << std::endl;
+    
+    // 2. Build the Minimal Perfect Hash Function (MPHF)
     typedef boomphf::SingleHashFunctor<uint64_t> hasher_t;
     typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
-    boophf_t mphf(keys.size(), keys, 1, gamma, false, false);
-
-    std::cout << "MPHF built for " << keys.size() << " keys." << std::endl;
-
-    // 通过 mphf 查询演示
-    // 选取一个已知 key 测试查询正确性
-    size_t test_idx = N / 2;
-    uint64_t test_key = keys[test_idx];
-    size_t pos = mphf.lookup(test_key);
-    assert(pos < values.size());
-    std::cout << "Lookup test key at index " << test_idx << ": value = " << values[pos] << std::endl;
-
-    // 测试一个不存在的key（结果未定义，但一般返回范围内）
-    uint64_t missing_key = encode_pair(-1, -1);
-    size_t missing_pos = mphf.lookup(missing_key);
-    std::cout << "Lookup missing key, index returned: " << missing_pos << std::endl;
-
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    double gamma = 2.0;  // Space/time trade-off parameter (1.0-3.0 typical range)
+    int num_threads = 1; // Number of threads to use
+    boophf_t mphf(keys.size(), keys, num_threads, gamma, false, false);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    double elapsed = std::chrono::duration<double>(end - start).count();
+    
+    std::cout << "Built MPHF in " << elapsed << " seconds" << std::endl;
+    std::cout << "Space usage: " << (float)mphf.totalBitSize() / num_keys << " bits/key" << std::endl;
+    
+    // 3. Test lookups
+    std::cout << "\nTesting lookups:" << std::endl;
+    for (size_t i = 0; i < 5; ++i) {
+        uint64_t key = keys[i];
+        uint64_t hash = mphf.lookup(key);
+        std::cout << "  Key " << key << " -> hash " << hash << std::endl;
+    }
+    
+    // 4. Verify that all hashes are unique and in range [0, num_keys)
+    std::vector<bool> seen(num_keys, false);
+    bool all_unique = true;
+    
+    for (const auto& key : keys) {
+        uint64_t hash = mphf.lookup(key);
+        if (hash >= num_keys || seen[hash]) {
+            all_unique = false;
+            break;
+        }
+        seen[hash] = true;
+    }
+    
+    std::cout << "\nVerification: " << (all_unique ? "PASSED" : "FAILED") << std::endl;
+    std::cout << "All keys map to unique values in [0, " << num_keys << ")" << std::endl;
+    
     return 0;
 }

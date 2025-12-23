@@ -44,14 +44,10 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/tests)
 
 # Examples
-add_executable(example examples/example.cpp)
 add_executable(example_custom_hash examples/example_custom_hash.cpp)
 add_executable(main examples/main.cpp)
 
 # Tests
-add_executable(test_endian tests/test_endian.cpp)
-add_executable(test_min tests/test_min.cpp)
-
 # Catch2-based tests
 # Create a library with Catch2 main
 add_library(catch_main STATIC tests/catch_main.cpp)
@@ -63,24 +59,30 @@ target_link_libraries(test_basic catch_main)
 add_executable(test_serialization tests/test_serialization.cpp)
 target_link_libraries(test_serialization catch_main)
 
+add_executable(test_endian tests/test_endian.cpp)
+target_link_libraries(test_endian catch_main)
+
+add_executable(test_min tests/test_min.cpp)
+target_link_libraries(test_min catch_main)
+
 # Link pthread on non-Windows platforms
 if (NOT MSVC)
-  target_link_libraries(example pthread)
   target_link_libraries(example_custom_hash pthread)
   target_link_libraries(main pthread)
-  target_link_libraries(test_endian pthread)
-  target_link_libraries(test_min pthread)
   target_link_libraries(test_basic pthread)
   target_link_libraries(test_serialization pthread)
+  target_link_libraries(test_endian pthread)
+  target_link_libraries(test_min pthread)
 endif()
 
 # Enable testing
 enable_testing()
 
 # Add tests to CTest
-add_test(NAME test_endian COMMAND test_endian)
 add_test(NAME test_basic COMMAND test_basic)
 add_test(NAME test_serialization COMMAND test_serialization)
+add_test(NAME test_endian COMMAND test_endian)
+add_test(NAME test_min COMMAND test_min)
 
 # Note: bootest.cpp has compilation issues and will be fixed in a future update
 # It would be built with:
