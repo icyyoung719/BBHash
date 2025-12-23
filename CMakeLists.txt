@@ -8,13 +8,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Disable warnings
-add_compile_options(
-    $<$<CXX_COMPILER_ID:MSVC>:/w>
-    $<$<CXX_COMPILER_ID:GNU>:-w>
-    $<$<CXX_COMPILER_ID:Clang>:-w>
-)
-
 # Common compile options
 if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
