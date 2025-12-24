@@ -479,9 +479,9 @@ public:
                 hash_pair_t bbhash;
                 int level;
                 if (_writeEachLevel) {
-                    (void)getLevel(bbhash, val, &level, i, i - 1);
+                    [[maybe_unused]] auto ignored = getLevel(bbhash, val, &level, i, i - 1);
                 } else {
-                    (void)getLevel(bbhash, val, &level, i);
+                    [[maybe_unused]] auto ignored = getLevel(bbhash, val, &level, i);
                 }
 
                 if (level == i) {
@@ -671,7 +671,7 @@ private:
     void insertIntoLevel(uint64_t level_hash, int i) {
         const uint64_t hashl = fastrange64(level_hash, _levels[i].hash_domain);
         if (_levels[i].bitset.atomic_test_and_set(hashl)) {
-            (void)_tempBitset->atomic_test_and_set(hashl);
+            [[maybe_unused]] auto ignored = _tempBitset->atomic_test_and_set(hashl);
         }
     }
 
