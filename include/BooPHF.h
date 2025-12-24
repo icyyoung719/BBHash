@@ -84,8 +84,8 @@ private:
         ++_pos;
 
         if (_cptread >= _inbuff) {
-            const int res = std::fread(_buffer, sizeof(basetype), _buffsize, _is);
-            _inbuff = res;
+            const size_t res = std::fread(_buffer, sizeof(basetype), static_cast<size_t>(_buffsize), _is);
+            _inbuff = static_cast<int>(res);
             _cptread = 0;
 
             if (res == 0) {
@@ -319,7 +319,7 @@ public:
 // Threading
 ////////////////////////////////////////////////////////////////
 
-constexpr int NBBUFF = 10000;
+constexpr uint64_t NBBUFF = 10000;
 
 template <typename Range, typename Iterator>
 struct thread_args {
@@ -453,7 +453,7 @@ public:
     void pthread_processLevel(std::vector<elem_t>& buffer, std::shared_ptr<Iterator> shared_it, 
                               std::shared_ptr<Iterator> until_p, int i) {
         uint64_t nb_done = 0;
-        const int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
+        const uint32_t tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
         auto until = *until_p;
         uint64_t inbuff = 0;
 
@@ -486,8 +486,8 @@ public:
 
                 if (level == i) {
                     if (_fastmode && i == _fastModeLevel) {
-                        const int idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
-                        if (idxl2 >= static_cast<int>(setLevelFastmode.size())) {
+                        const uint64_t idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
+                        if (idxl2 >= setLevelFastmode.size()) {
                             _fastmode = false;
                         } else {
                             setLevelFastmode[idxl2] = val;
@@ -635,7 +635,7 @@ private:
 
         for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
             if (std::pow(_proba_collision, ii) < _percent_elem_loaded_for_fastMode) {
-                _fastModeLevel = ii;
+                _fastModeLevel = static_cast<int>(ii);
                 break;
             }
         }
@@ -647,7 +647,7 @@ private:
         int level = 0;
         uint64_t hash_raw = 0;
 
-        for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < maxlevel; ++ii) {
+        for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < static_cast<uint32_t>(maxlevel); ++ii) {
             // Compute next hash
             if (ii == 0) {
                 hash_raw = _hasher.h0(bbhash, val);
@@ -657,7 +657,7 @@ private:
                 hash_raw = _hasher.next(bbhash);
             }
 
-            if (ii >= minlevel && _levels[ii].get(hash_raw)) {
+            if (ii >= static_cast<uint32_t>(minlevel) && _levels[ii].get(hash_raw)) {
                 break;
             }
             ++level;

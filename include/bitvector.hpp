@@ -28,8 +28,8 @@ namespace boomphf {
 
 /// Efficient popcount for 64-bit integers
 [[nodiscard]] inline constexpr uint64_t popcount_64(uint64_t x) noexcept {
-    const uint32_t low = x & 0xffffffff;
-    const uint32_t high = (x >> 32ULL) & 0xffffffff;
+    const uint32_t low = static_cast<uint32_t>(x & 0xffffffff);
+    const uint32_t high = static_cast<uint32_t>((x >> 32ULL) & 0xffffffff);
     return popcount_32(low) + popcount_32(high);
 }
 
@@ -204,11 +204,11 @@ public:
         
         uint64_t r = _ranks[block];
         for (uint64_t w = block * NB_BITS_PER_RANK_SAMPLE / 64; w < word_idx; ++w) {
-            r += popcount_64(_bitArray[w]);
+            r += popcount_64(_bitArray[w].load(std::memory_order_relaxed));
         }
         
         const uint64_t mask = (uint64_t(1) << word_offset) - 1;
-        r += popcount_64(_bitArray[word_idx] & mask);
+        r += popcount_64(_bitArray[word_idx].load(std::memory_order_relaxed) & mask);
         return r;
     }
 
