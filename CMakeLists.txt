@@ -58,6 +58,9 @@ target_link_libraries(test_endian catch_main)
 add_executable(test_min tests/test_min.cpp)
 target_link_libraries(test_min catch_main)
 
+add_executable(test_multi_thread tests/test_multi_thread.cpp)
+target_link_libraries(test_multi_thread catch_main)
+
 # Link pthread on non-Windows platforms
 if (NOT MSVC)
   target_link_libraries(example_custom_hash pthread)
@@ -66,6 +69,7 @@ if (NOT MSVC)
   target_link_libraries(test_serialization pthread)
   target_link_libraries(test_endian pthread)
   target_link_libraries(test_min pthread)
+  target_link_libraries(test_multi_thread pthread)
 endif()
 
 # Enable testing
@@ -76,6 +80,7 @@ add_test(NAME test_basic COMMAND test_basic)
 add_test(NAME test_serialization COMMAND test_serialization)
 add_test(NAME test_endian COMMAND test_endian)
 add_test(NAME test_min COMMAND test_min)
+add_test(NAME test_multi_thread COMMAND test_multi_thread)
 
 # Note: bootest.cpp has compilation issues and will be fixed in a future update
 # It would be built with:
