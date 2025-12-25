@@ -129,9 +129,14 @@ private:
         int min_r = static_cast<int>(remaining_sec / 60);
         double sec_r = remaining_sec - min_r * 60;
 
+        double percentage = 100.0 * (static_cast<double>(current_done) / todo);
+        if (percentage > 100.0) {
+            percentage = 100.0;
+        }
+        
         std::fprintf(stderr, "%c[%s]  %-5.3g%%   elapsed: %3i min %-2.0f sec   remaining: %3i min %-2.0f sec", 
                     13, message.c_str(),
-                    100 * (static_cast<double>(current_done) / todo),
+                    percentage,
                     min_e, sec_e, min_r, sec_r);
     }
 };
