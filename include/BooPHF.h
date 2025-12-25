@@ -17,6 +17,7 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <iomanip>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -42,11 +43,11 @@ public:
         _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
     }
 
-    bfile_iterator(const bfile_iterator& cr) 
-        : _is(cr._is), _pos(cr._pos), _buffsize(cr._buffsize), 
-          _inbuff(cr._inbuff), _cptread(cr._cptread), _elem(cr._elem) {
-        _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
-        std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
+        bfile_iterator(const bfile_iterator& cr) 
+                : _is(cr._is), _pos(cr._pos), _buffsize(cr._buffsize), 
+                    _inbuff(cr._inbuff), _cptread(cr._cptread), _elem(cr._elem) {
+                _buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
+                std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
     }
 
     explicit bfile_iterator(FILE* is) 
@@ -84,7 +85,7 @@ private:
         ++_pos;
 
         if (_cptread >= _inbuff) {
-            const int res = std::fread(_buffer, sizeof(basetype), _buffsize, _is);
+            const size_t res = std::fread(_buffer, sizeof(basetype), _buffsize, _is);
             _inbuff = res;
             _cptread = 0;
 
@@ -101,11 +102,11 @@ private:
     
     basetype _elem;
     FILE* _is;
-    unsigned long _pos;
+    uint64_t _pos;
     basetype* _buffer;
-    int _inbuff;
-    int _cptread;
-    int _buffsize;
+    size_t _inbuff;
+    size_t _cptread;
+    size_t _buffsize;
 };
 
 /// Binary file reader with iterator interface
@@ -381,9 +382,9 @@ public:
                        total_writeEach, _fastModeLevel, total_fastmode_ram, total_raw);
 
             if (writeEach) {
-                _progressBar.init(_nelem * total_writeEach, "Building BooPHF", num_thread);
+				_progressBar.init(_nelem * static_cast<uint64_t>(total_writeEach), "Building BooPHF", num_thread);
             } else if (_fastmode) {
-                _progressBar.init(_nelem * total_fastmode_ram, "Building BooPHF", num_thread);
+                _progressBar.init(_nelem * static_cast<uint64_t>(total_fastmode_ram), "Building BooPHF", num_thread);
             } else {
                 _progressBar.init(_nelem * _nb_levels, "Building BooPHF", num_thread);
             }
@@ -419,7 +420,7 @@ public:
         int level;
         const uint64_t level_hash = getLevel(bbhash, elem, &level);
 
-        if (level == (_nb_levels - 1)) {
+        if (level == static_cast<int>(_nb_levels) - 1) {
             const auto in_final_map = _final_hash.find(elem);
             if (in_final_map == _final_hash.end()) {
                 return ULLONG_MAX;  // Element not in original set
@@ -441,11 +442,12 @@ public:
 
         const uint64_t totalsize = totalsizeBitset + _final_hash.size() * 42 * 8;
 
-        std::printf("Bitarray    %" PRIu64 "  bits (%.2f %%)   (array + ranks )\n",
-               totalsizeBitset, 100 * static_cast<float>(totalsizeBitset) / totalsize);
-        std::printf("Last level hash  %12lu  bits (%.2f %%) (nb in last level hash %lu)\n",
-               _final_hash.size() * 42 * 8, 100 * static_cast<float>(_final_hash.size() * 42 * 8) / totalsize,
-               _final_hash.size());
+         std::cout << "Bitarray    " << totalsizeBitset << "  bits (" << std::fixed << std::setprecision(2)
+                << (100 * static_cast<float>(totalsizeBitset) / totalsize) << "% )   (array + ranks )\n";
+         const uint64_t last_level_bits = static_cast<uint64_t>(_final_hash.size()) * 42ULL * 8ULL;
+         std::cout << "Last level hash  " << last_level_bits << "  bits (" << std::fixed << std::setprecision(2)
+                << (100 * static_cast<float>(last_level_bits) / totalsize) << "% ) (nb in last level hash "
+                << _final_hash.size() << ")\n";
         return totalsize;
     }
 
@@ -453,7 +455,7 @@ public:
     void pthread_processLevel(std::vector<elem_t>& buffer, std::shared_ptr<Iterator> shared_it, 
                               std::shared_ptr<Iterator> until_p, int i) {
         uint64_t nb_done = 0;
-        const int tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
+        const uint32_t tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
         auto until = *until_p;
         uint64_t inbuff = 0;
 
@@ -486,21 +488,21 @@ public:
 
                 if (level == i) {
                     if (_fastmode && i == _fastModeLevel) {
-                        const int idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
-                        if (idxl2 >= static_cast<int>(setLevelFastmode.size())) {
+                        const uint64_t idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
+                        if (idxl2 >= static_cast<uint64_t>(setLevelFastmode.size())) {
                             _fastmode = false;
                         } else {
-                            setLevelFastmode[idxl2] = val;
+                            setLevelFastmode[static_cast<size_t>(idxl2)] = val;
                         }
                     }
 
                     // Insert into next level or final hash
-                    if (i == _nb_levels - 1) {
+                    if (i == static_cast<int>(_nb_levels) - 1) {
                         const uint64_t hashidx = _hashidx.fetch_add(1, std::memory_order_relaxed);
                         std::lock_guard<std::mutex> lock(_mutex);
                         _final_hash[val] = hashidx;
                     } else {
-                        if (_writeEachLevel && i > 0 && i < _nb_levels - 1) {
+                        if (_writeEachLevel && i > 0 && i < static_cast<int>(_nb_levels) - 1) {
                             if (writebuff >= NBBUFF) {
                                 write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
                             }
@@ -574,9 +576,11 @@ public:
         
         for (uint32_t ii = 0; ii < _nb_levels; ++ii) {
             _levels[ii].idx_begin = previous_idx;
-            _levels[ii].hash_domain = (static_cast<uint64_t>(_hash_domain * std::pow(_proba_collision, ii)) + 63) / 64 * 64;
+            const double domain_d = static_cast<double>(_hash_domain) * std::pow(_proba_collision, ii);
+            uint64_t domain = static_cast<uint64_t>(std::ceil(domain_d));
+            _levels[ii].hash_domain = (domain + 63ULL) / 64ULL * 64ULL;
             if (_levels[ii].hash_domain == 0) {
-                _levels[ii].hash_domain = 64;
+                _levels[ii].hash_domain = 64ULL;
             }
             previous_idx += _levels[ii].hash_domain;
         }
@@ -599,7 +603,7 @@ public:
 private:
     void setup() {
         const uint64_t tid_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
-        _pid = static_cast<int>(tid_hash);
+        _pid = tid_hash;
 
         _cptTotalProcessed = 0;
 
@@ -626,9 +630,11 @@ private:
             _levels[ii].idx_begin = previous_idx;
 
             // Round size to nearest superior multiple of 64
-            _levels[ii].hash_domain = (static_cast<uint64_t>(_hash_domain * std::pow(_proba_collision, ii)) + 63) / 64 * 64;
+            const double domain_d = static_cast<double>(_hash_domain) * std::pow(_proba_collision, ii);
+            uint64_t domain = static_cast<uint64_t>(std::ceil(domain_d));
+            _levels[ii].hash_domain = (domain + 63ULL) / 64ULL * 64ULL;
             if (_levels[ii].hash_domain == 0) {
-                _levels[ii].hash_domain = 64;
+                _levels[ii].hash_domain = 64ULL;
             }
             previous_idx += _levels[ii].hash_domain;
         }
@@ -647,7 +653,7 @@ private:
         int level = 0;
         uint64_t hash_raw = 0;
 
-        for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < maxlevel; ++ii) {
+        for (uint32_t ii = 0; ii < (_nb_levels - 1) && ii < static_cast<uint32_t>(maxlevel); ++ii) {
             // Compute next hash
             if (ii == 0) {
                 hash_raw = _hasher.h0(bbhash, val);
@@ -656,8 +662,7 @@ private:
             } else {
                 hash_raw = _hasher.next(bbhash);
             }
-
-            if (ii >= minlevel && _levels[ii].get(hash_raw)) {
+            if (ii >= static_cast<uint32_t>(minlevel) && _levels[ii].get(hash_raw)) {
                 break;
             }
             ++level;
@@ -689,7 +694,7 @@ private:
                 std::remove(fname_old.c_str());
             }
 
-            if (i < _nb_levels - 1 && i > 0) {
+            if (i < static_cast<int>(_nb_levels) - 1 && i > 0) {
                 _currlevelFile = std::fopen(fname_curr.c_str(), "w");
             }
         }
@@ -763,12 +768,12 @@ private:
         }
 
         if (_writeEachLevel) {
-            if (i < _nb_levels - 1 && i > 0) {
+            if (i < static_cast<int>(_nb_levels) - 1 && i > 0) {
                 std::fflush(_currlevelFile);
                 std::fclose(_currlevelFile);
             }
 
-            if (i == _nb_levels - 1) {
+            if (i == static_cast<int>(_nb_levels) - 1) {
                 std::remove(fname_prev.c_str());
             }
         }
@@ -805,7 +810,7 @@ private:
     bool _built{false};
     bool _writeEachLevel{true};
     FILE* _currlevelFile{nullptr};
-    int _pid{0};
+    uint64_t _pid{0};
 
 public:
     std::mutex _mutex;
