@@ -28,12 +28,16 @@ namespace boomphf
 	return (x * h01) >> 24;
 }
 
-/// Efficient popcount for 64-bit integers
-[[nodiscard]] inline constexpr uint64_t popcount_64(uint64_t x) noexcept
+// Prefer compiler builtin when available, otherwise fallback to portable split-32 implementation
+[[nodiscard]] inline uint64_t popcount_64(uint64_t x) noexcept
 {
-	const uint32_t low = x & 0xffffffff;
-	const uint32_t high = (x >> 32ULL) & 0xffffffff;
+#if defined(__GNUG__) || defined(__clang__)
+	return static_cast<uint64_t>(__builtin_popcountll(x));
+#else
+	const uint32_t low = x & 0xffffffffu;
+	const uint32_t high = static_cast<uint32_t>((x >> 32ULL) & 0xffffffffu);
 	return popcount_32(low) + popcount_32(high);
+#endif
 }
 
 /// Concurrent bit vector with atomic operations and rank support
