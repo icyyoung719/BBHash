@@ -11,6 +11,10 @@
 #include <ostream>
 #include <vector>
 
+#if defined(_WIN32) || defined(_MSC_VER)
+#include "windows_sane.h" // For InterlockedCompareExchange64
+#endif
+
 namespace boomphf
 {
 
@@ -181,10 +185,7 @@ public:
 	}
 
 	/// Get bit value at position
-	[[nodiscard]] uint64_t operator[](uint64_t pos) const
-	{
-		return (_bitArray[pos >> 6] >> (pos & 63)) & 1;
-	}
+	[[nodiscard]] uint64_t operator[](uint64_t pos) const { return (_bitArray[pos >> 6] >> (pos & 63)) & 1; }
 
 	// if in C++20, use atomic_ref for atomic operations on _bitArray
 	/// Atomically test and set bit (returns old value)
@@ -195,21 +196,19 @@ public:
 		uint64_t oldval;
 #if defined(_WIN32) || defined(_MSC_VER)
 		// Use InterlockedCompareExchange64(target, 0, 0) as an atomic load (does not modify the value)
-		do {
+		do
+		{
 			oldval = InterlockedCompareExchange64((volatile LONG64*)target, 0, 0); // atomic load
-			// Try to OR the bit in using CAS
-		} while (InterlockedCompareExchange64((volatile LONG64*)target, (LONG64)(oldval | mask), (LONG64)oldval) != (LONG64)oldval);
+			                                                                       // Try to OR the bit in using CAS
+		} while (InterlockedCompareExchange64((volatile LONG64*)target, (LONG64)(oldval | mask), (LONG64)oldval) !=
+		         (LONG64)oldval);
 #else
-		do {
+		do
+		{
 			// Atomic load, get current value
 			oldval = __atomic_load_n(target, __ATOMIC_ACQUIRE);
-		} while (!__atomic_compare_exchange_n(
-			target,
-			&oldval,
-			oldval | mask,
-			false,
-			__ATOMIC_ACQ_REL,
-			__ATOMIC_ACQUIRE));
+		} while (
+		    !__atomic_compare_exchange_n(target, &oldval, oldval | mask, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE));
 #endif
 		return (oldval >> (pos & 63)) & 1;
 	}

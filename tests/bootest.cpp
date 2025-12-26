@@ -20,7 +20,7 @@ uint64_t* data;
 using namespace std;
 
 // uncomment to check correctness of the func
-//#define CHECK_MPHF
+// #define CHECK_MPHF
 
 #define MAX_RANDOM 2147483648
 #define srandomdev() srand((unsigned)time(NULL))
@@ -416,7 +416,7 @@ template <typename phf_t, typename Range> void bench_mphf_lookup(phf_t* bphf, Ra
 	       1000.0 * stats.mean(), stats.relative_stddev(), dumb);
 }
 
-//#include "bucketing.h"
+// #include "bucketing.h"
 
 int main(int argc, char* argv[])
 {

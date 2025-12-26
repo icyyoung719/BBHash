@@ -3,8 +3,8 @@
 
 #include <cstdint>
 #include <cstring>
-#include <type_traits>
 #include <iostream>
+#include <type_traits>
 
 namespace boomphf
 {
