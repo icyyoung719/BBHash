@@ -32,6 +32,10 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Sanitize")
   endif()
 endif()
 
+# Defines
+add_compile_definitions(NOMINMAX)
+
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/tests)
