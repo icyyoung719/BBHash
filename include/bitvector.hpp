@@ -40,7 +40,14 @@ namespace boomphf
 #endif
 }
 
-/// Concurrent bit vector with atomic operations and rank support
+/**
+ * Concurrent bit vector with atomic operations and rank support
+ *
+ * By default, operations are not protected by mutexes as they are intended to be
+ * used only in a single thread.
+ *
+ * If called from multiple threads, use atomic_test_and_set or outer synchronization.
+ */
 class bitVector
 {
 public:
@@ -49,7 +56,7 @@ public:
 	explicit bitVector(uint64_t n) : _size(n)
 	{
 		_nchar = 1ULL + n / 64ULL;
-		_bitArray = new std::atomic<uint64_t>[_nchar]();
+		_bitArray = new uint64_t[_nchar]();
 	}
 
 	~bitVector() { delete[] _bitArray; }
@@ -57,10 +64,10 @@ public:
 	// Copy constructor
 	bitVector(const bitVector& r) : _size(r._size), _nchar(r._nchar), _ranks(r._ranks)
 	{
-		_bitArray = new std::atomic<uint64_t>[_nchar];
+		_bitArray = new uint64_t[_nchar];
 		for (size_t i = 0; i < _nchar; ++i)
 		{
-			_bitArray[i].store(r._bitArray[i].load(std::memory_order_relaxed), std::memory_order_relaxed);
+			_bitArray[i] = r._bitArray[i];
 		}
 	}
 
@@ -74,10 +81,10 @@ public:
 			_ranks = r._ranks;
 
 			delete[] _bitArray;
-			_bitArray = new std::atomic<uint64_t>[_nchar];
+			_bitArray = new uint64_t[_nchar];
 			for (size_t i = 0; i < _nchar; ++i)
 			{
-				_bitArray[i].store(r._bitArray[i].load(std::memory_order_relaxed), std::memory_order_relaxed);
+				_bitArray[i] = r._bitArray[i];
 			}
 		}
 		return *this;
@@ -107,7 +114,7 @@ public:
 	{
 		_nchar = 1ULL + newsize / 64ULL;
 		delete[] _bitArray;
-		_bitArray = new std::atomic<uint64_t>[_nchar]();
+		_bitArray = new uint64_t[_nchar]();
 		_size = newsize;
 	}
 
@@ -120,7 +127,7 @@ public:
 	{
 		for (size_t i = 0; i < _nchar; ++i)
 		{
-			_bitArray[i].store(0, std::memory_order_relaxed);
+			_bitArray[i] = 0;
 		}
 	}
 
@@ -176,30 +183,46 @@ public:
 	/// Get bit value at position
 	[[nodiscard]] uint64_t operator[](uint64_t pos) const
 	{
-		return (_bitArray[pos >> 6].load(std::memory_order_relaxed) >> (pos & 63)) & 1;
+		return (_bitArray[pos >> 6] >> (pos & 63)) & 1;
 	}
 
+	// if in C++20, use atomic_ref for atomic operations on _bitArray
 	/// Atomically test and set bit (returns old value)
 	[[nodiscard]] inline uint64_t atomic_test_and_set(uint64_t pos)
 	{
-		const uint64_t mask = 1ULL << (pos & 63);
-		auto* word = reinterpret_cast<std::atomic<uint64_t>*>(_bitArray + (pos >> 6));
-		uint64_t oldval = word->load(std::memory_order_seq_cst);
-		while (!word->compare_exchange_weak(oldval, oldval | mask, std::memory_order_seq_cst))
-		{
-		}
+		uint64_t mask = (1ULL << (pos & 63));
+		uint64_t* target = _bitArray + (pos >> 6);
+		uint64_t oldval;
+#if defined(_WIN32) || defined(_MSC_VER)
+		// Use InterlockedCompareExchange64(target, 0, 0) as an atomic load (does not modify the value)
+		do {
+			oldval = InterlockedCompareExchange64((volatile LONG64*)target, 0, 0); // atomic load
+			// Try to OR the bit in using CAS
+		} while (InterlockedCompareExchange64((volatile LONG64*)target, (LONG64)(oldval | mask), (LONG64)oldval) != (LONG64)oldval);
+#else
+		do {
+			// Atomic load, get current value
+			oldval = __atomic_load_n(target, __ATOMIC_ACQUIRE);
+		} while (!__atomic_compare_exchange_n(
+			target,
+			&oldval,
+			oldval | mask,
+			false,
+			__ATOMIC_ACQ_REL,
+			__ATOMIC_ACQUIRE));
+#endif
 		return (oldval >> (pos & 63)) & 1;
 	}
 
 	[[nodiscard]] uint64_t get(uint64_t pos) const { return (*this)[pos]; }
 
-	[[nodiscard]] uint64_t get64(uint64_t cell64) const { return _bitArray[cell64].load(std::memory_order_relaxed); }
+	[[nodiscard]] uint64_t get64(uint64_t cell64) const { return _bitArray[cell64]; }
 
 	/// Set bit at position to 1
-	void set(uint64_t pos) { _bitArray[pos >> 6].fetch_or(1ULL << (pos & 63), std::memory_order_relaxed); }
+	void set(uint64_t pos) { _bitArray[pos >> 6] |= (1ULL << (pos & 63)); }
 
 	/// Set bit at position to 0
-	void reset(uint64_t pos) { _bitArray[pos >> 6].fetch_and(~(1ULL << (pos & 63)), std::memory_order_relaxed); }
+	void reset(uint64_t pos) { _bitArray[pos >> 6] &= (~(1ULL << (pos & 63))); }
 
 	/// Build rank structure, returns final rank value
 	[[nodiscard]] uint64_t build_ranks(uint64_t offset = 0)
@@ -213,7 +236,7 @@ public:
 			{
 				_ranks.push_back(current_rank);
 			}
-			current_rank += popcount_64(_bitArray[ii].load(std::memory_order_relaxed));
+			current_rank += popcount_64(_bitArray[ii]);
 		}
 		return current_rank;
 	}
@@ -244,7 +267,7 @@ public:
 		std::vector<uint64_t> temp_array(_nchar);
 		for (size_t i = 0; i < _nchar; ++i)
 		{
-			temp_array[i] = _bitArray[i].load(std::memory_order_relaxed);
+			temp_array[i] = _bitArray[i];
 		}
 		boomphf::write_le_array(os, temp_array.data(), _nchar);
 
@@ -264,7 +287,7 @@ public:
 		boomphf::read_le_array(is, temp_array.data(), _nchar);
 		for (size_t i = 0; i < _nchar; ++i)
 		{
-			_bitArray[i].store(temp_array[i], std::memory_order_relaxed);
+			_bitArray[i] = temp_array[i];
 		}
 
 		uint64_t sizer;
@@ -274,7 +297,7 @@ public:
 	}
 
 private:
-	std::atomic<uint64_t>* _bitArray = nullptr;
+	uint64_t* _bitArray = nullptr;
 	uint64_t _size = 0;
 	uint64_t _nchar = 0;
 

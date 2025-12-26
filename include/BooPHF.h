@@ -476,7 +476,11 @@ public:
 	                          std::shared_ptr<Iterator> until_p, int i)
 	{
 		uint64_t nb_done = 0;
-		const uint32_t tid = _nb_living.fetch_add(1, std::memory_order_relaxed);
+		uint32_t tid;
+		{
+			std::lock_guard<std::mutex> lock(_nb_living_mutex);
+			tid = _nb_living++;
+		}
 		auto until = *until_p;
 		uint64_t inbuff = 0;
 
@@ -518,7 +522,11 @@ public:
 				{
 					if (_fastmode && i == _fastModeLevel)
 					{
-						const uint64_t idxl2 = _idxLevelsetLevelFastmode.fetch_add(1, std::memory_order_relaxed);
+						uint64_t idxl2;
+						{
+							std::lock_guard<std::mutex> lock(_idxLevel_mutex);
+							idxl2 = _idxLevelsetLevelFastmode++;
+						}
 						if (idxl2 >= static_cast<uint64_t>(setLevelFastmode.size()))
 						{
 							_fastmode = false;
@@ -532,9 +540,12 @@ public:
 					// Insert into next level or final hash
 					if (i == static_cast<int>(_nb_levels) - 1)
 					{
-						const uint64_t hashidx = _hashidx.fetch_add(1, std::memory_order_relaxed);
-						std::lock_guard<std::mutex> lock(_mutex);
-						_final_hash[val] = hashidx;
+						uint64_t hashidx;
+						{
+							std::lock_guard<std::mutex> lock(_final_hash_mutex);
+							hashidx = _hashidx++;
+							_final_hash[val] = hashidx;
+						}
 					}
 					else
 					{
@@ -777,9 +788,9 @@ private:
 		}
 
 		_cptLevel = 0;
-		_hashidx.store(0, std::memory_order_relaxed);
-		_idxLevelsetLevelFastmode.store(0, std::memory_order_relaxed);
-		_nb_living.store(0, std::memory_order_relaxed);
+		_hashidx = 0;
+		_idxLevelsetLevelFastmode = 0;
+		_nb_living = 0;
 
 		// Create threads
 		std::vector<std::thread> tab_threads;
@@ -892,12 +903,12 @@ private:
 	uint64_t _nelem{0};
 	std::unordered_map<elem_t, uint64_t, Hasher_t> _final_hash;
 	Progress _progressBar;
-	std::atomic<uint32_t> _nb_living{0};
+	uint32_t _nb_living{0};
 	uint32_t _num_thread{1};
-	std::atomic<uint64_t> _hashidx{0};
+	uint64_t _hashidx{0};
 	double _proba_collision{0.0};
 	uint64_t _lastbitsetrank{0};
-	std::atomic<uint64_t> _idxLevelsetLevelFastmode{0};
+	uint64_t _idxLevelsetLevelFastmode{0};
 	uint64_t _cptLevel{0};
 	uint64_t _cptTotalProcessed{0};
 
@@ -913,6 +924,10 @@ private:
 	bool _writeEachLevel{true};
 	FILE* _currlevelFile{nullptr};
 	uint64_t _pid{0};
+
+	std::mutex _nb_living_mutex;
+	std::mutex _idxLevel_mutex;
+	std::mutex _final_hash_mutex;
 
 public:
 	std::mutex _mutex;

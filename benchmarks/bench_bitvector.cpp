@@ -63,7 +63,7 @@ static void BM_RankQueries(benchmark::State& state)
     bitVector bv(nbits);
     for (uint64_t i = 0; i < nbits; i += 3)
         bv.set(i);
-    bv.build_ranks(0);
+    [[maybe_unused]] auto ignored = bv.build_ranks(0);
 
     for (auto _ : state)
     {
