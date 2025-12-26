@@ -4,18 +4,19 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <filesystem>
 
 static std::filesystem::path find_build_dir()
 {
 	auto p = std::filesystem::current_path();
-	for (; ; ) {
+	for (;;)
+	{
 		auto candidate = p / "build";
 		if (std::filesystem::exists(candidate) && std::filesystem::is_directory(candidate))
 			return candidate;
@@ -37,11 +38,11 @@ TEST_CASE("random_generated_keys_min", "[min]")
 
 	std::cout << "Generating random keys..." << std::endl;
 	int max_num = 1000000; // generated count
-	for (int i = 0; i < max_num; ++i) {
+	for (int i = 0; i < max_num; ++i)
+	{
 		int32_t prev = dist(gen);
 		int32_t next = dist(gen);
-		uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(prev)) << 32) |
-					   static_cast<uint32_t>(next);
+		uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(prev)) << 32) | static_cast<uint32_t>(next);
 		key_set.insert(key);
 	}
 
@@ -58,7 +59,8 @@ TEST_CASE("random_generated_keys_min", "[min]")
 	std::ofstream csv(csv_path);
 	REQUIRE(csv.is_open());
 	csv << "prev,next,combined\n";
-	for (auto k : input_keys) {
+	for (auto k : input_keys)
+	{
 		uint32_t prev = static_cast<uint32_t>(k >> 32);
 		uint32_t next = static_cast<uint32_t>(k & 0xFFFFFFFFu);
 		csv << static_cast<int32_t>(prev) << ',' << static_cast<int32_t>(next) << ',' << k << '\n';

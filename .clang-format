@@ -5,8 +5,9 @@ DerivePointerAlignment: false
 
 IndentWidth: 4
 TabWidth: 4
+AccessModifierOffset: -4  # Indent access modifiers by one level
 UseTab: ForIndentation
-ColumnLimit: 0
+ColumnLimit: 120
 BreakBeforeBraces: Allman
 AllowShortIfStatementsOnASingleLine: false
 IndentCaseLabels: false

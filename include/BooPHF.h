@@ -31,8 +31,7 @@ namespace boomphf
 {
 
 /// Buffered file iterator for reading binary data
-template <typename basetype>
-class bfile_iterator
+template <typename basetype> class bfile_iterator
 {
 public:
 	using iterator_category = std::forward_iterator_tag;
@@ -47,25 +46,21 @@ public:
 	}
 
 	bfile_iterator(const bfile_iterator& cr)
-	    : _is(cr._is), _pos(cr._pos), _buffsize(cr._buffsize),
-	      _inbuff(cr._inbuff), _cptread(cr._cptread), _elem(cr._elem)
+	    : _is(cr._is), _pos(cr._pos), _buffsize(cr._buffsize), _inbuff(cr._inbuff), _cptread(cr._cptread),
+	      _elem(cr._elem)
 	{
 		_buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
 		std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
 	}
 
-	explicit bfile_iterator(FILE* is)
-	    : _is(is), _pos(0), _inbuff(0), _cptread(0), _buffsize(10000)
+	explicit bfile_iterator(FILE* is) : _is(is), _pos(0), _inbuff(0), _cptread(0), _buffsize(10000)
 	{
 		_buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
 		std::fseek(_is, 0, SEEK_SET);
 		advance();
 	}
 
-	~bfile_iterator()
-	{
-		std::free(_buffer);
-	}
+	~bfile_iterator() { std::free(_buffer); }
 
 	reference operator*() const { return _elem; }
 
@@ -85,10 +80,7 @@ public:
 		return rhs._pos == lhs._pos;
 	}
 
-	friend bool operator!=(const bfile_iterator& lhs, const bfile_iterator& rhs)
-	{
-		return !(lhs == rhs);
-	}
+	friend bool operator!=(const bfile_iterator& lhs, const bfile_iterator& rhs) { return !(lhs == rhs); }
 
 private:
 	void advance()
@@ -123,8 +115,7 @@ private:
 };
 
 /// Binary file reader with iterator interface
-template <typename type_elem>
-class file_binary
+template <typename type_elem> class file_binary
 {
 public:
 	explicit file_binary(const char* filename)
@@ -138,20 +129,11 @@ public:
 
 	explicit file_binary(const std::string& filename) : file_binary(filename.c_str()) {}
 
-	~file_binary()
-	{
-		std::fclose(_is);
-	}
+	~file_binary() { std::fclose(_is); }
 
-	[[nodiscard]] bfile_iterator<type_elem> begin() const
-	{
-		return bfile_iterator<type_elem>(_is);
-	}
+	[[nodiscard]] bfile_iterator<type_elem> begin() const { return bfile_iterator<type_elem>(_is); }
 
-	[[nodiscard]] bfile_iterator<type_elem> end() const
-	{
-		return bfile_iterator<type_elem>();
-	}
+	[[nodiscard]] bfile_iterator<type_elem> end() const { return bfile_iterator<type_elem>(); }
 
 	[[nodiscard]] size_t size() const { return 0; }
 
@@ -167,24 +149,14 @@ using hash_set_t = std::array<uint64_t, 10>;
 using hash_pair_t = std::array<uint64_t, 2>;
 
 /// Hash function generator for Items
-template <typename Item>
-class HashFunctors
+template <typename Item> class HashFunctors
 {
 public:
-	HashFunctors() : _nbFct(7), _user_seed(0)
-	{
-		generate_hash_seed();
-	}
+	HashFunctors() : _nbFct(7), _user_seed(0) { generate_hash_seed(); }
 
-	[[nodiscard]] uint64_t operator()(const Item& key, size_t idx) const
-	{
-		return hash64(key, _seed_tab[idx]);
-	}
+	[[nodiscard]] uint64_t operator()(const Item& key, size_t idx) const { return hash64(key, _seed_tab[idx]); }
 
-	[[nodiscard]] uint64_t hashWithSeed(const Item& key, uint64_t seed) const
-	{
-		return hash64(key, seed);
-	}
+	[[nodiscard]] uint64_t hashWithSeed(const Item& key, uint64_t seed) const { return hash64(key, seed); }
 
 	/// Returns all hash values for the key
 	[[nodiscard]] hash_set_t operator()(const Item& key) const
@@ -236,8 +208,7 @@ private:
 };
 
 /// Wrapper to return single hash value instead of multiple hashes
-template <typename Item>
-class SingleHashFunctor
+template <typename Item> class SingleHashFunctor
 {
 public:
 	[[nodiscard]] uint64_t operator()(const Item& key, uint64_t seed = 0xAAAAAAAA55555555ULL) const
@@ -251,12 +222,10 @@ private:
 
 /// Xorshift-based hash generator using a single hash functor
 /// Based on Xorshift128* by Sebastiano Vigna (public domain)
-template <typename Item, class SingleHasher_t>
-class XorshiftHashFunctors
+template <typename Item, class SingleHasher_t> class XorshiftHashFunctors
 {
-	static_assert(
-	    std::is_invocable_r_v<uint64_t, const SingleHasher_t&, const Item&, uint64_t>,
-	    "SingleHasher_t::operator()(const Item&, uint64_t) must be const and return uint64_t");
+	static_assert(std::is_invocable_r_v<uint64_t, const SingleHasher_t&, const Item&, uint64_t>,
+	              "SingleHasher_t::operator()(const Item&, uint64_t) must be const and return uint64_t");
 
 	[[nodiscard]] uint64_t next(uint64_t* s) const
 	{
@@ -315,8 +284,7 @@ private:
 ////////////////////////////////////////////////////////////////
 
 /// Range wrapper for iterators
-template <typename Iterator>
-struct iter_range
+template <typename Iterator> struct iter_range
 {
 	iter_range(Iterator b, Iterator e) : m_begin(b), m_end(e) {}
 
@@ -326,8 +294,7 @@ struct iter_range
 	Iterator m_begin, m_end;
 };
 
-template <typename Iterator>
-[[nodiscard]] iter_range<Iterator> range(Iterator begin, Iterator end)
+template <typename Iterator> [[nodiscard]] iter_range<Iterator> range(Iterator begin, Iterator end)
 {
 	return iter_range<Iterator>(begin, end);
 }
@@ -336,10 +303,7 @@ template <typename Iterator>
 // Level structure
 ////////////////////////////////////////////////////////////////
 
-[[nodiscard]] inline uint64_t fastrange64(uint64_t word, uint64_t p)
-{
-	return word % p;
-}
+[[nodiscard]] inline uint64_t fastrange64(uint64_t word, uint64_t p) { return word % p; }
 
 class level
 {
@@ -364,8 +328,7 @@ public:
 
 constexpr int NBBUFF = 10000;
 
-template <typename Range, typename Iterator>
-struct thread_args
+template <typename Range, typename Iterator> struct thread_args
 {
 	void* boophf;
 	const Range* range;
@@ -380,8 +343,7 @@ void thread_processLevel(thread_args<Range, it_type>* targ);
 
 /// Minimal perfect hash function
 /// Hasher_t returns a single hash when operator()(elem_t key) is called
-template <typename elem_t, typename Hasher_t>
-class mphf
+template <typename elem_t, typename Hasher_t> class mphf
 {
 	using MultiHasher_t = XorshiftHashFunctors<elem_t, Hasher_t>;
 
@@ -391,14 +353,10 @@ public:
 
 	/// Construct MPHF from input range
 	template <typename Range>
-	mphf(uint64_t n, const Range& input_range, int num_thread = 1, double gamma = 2.0,
-	     bool writeEach = true, bool progress = true, float perc_elem_loaded = 0.03)
-	    : _gamma(gamma),
-	      _hash_domain(static_cast<uint64_t>(std::ceil(static_cast<double>(n) * gamma))),
-	      _nelem(n),
-	      _num_thread(num_thread),
-	      _percent_elem_loaded_for_fastMode(perc_elem_loaded),
-	      _withprogress(progress)
+	mphf(uint64_t n, const Range& input_range, int num_thread = 1, double gamma = 2.0, bool writeEach = true,
+	     bool progress = true, float perc_elem_loaded = 0.03)
+	    : _gamma(gamma), _hash_domain(static_cast<uint64_t>(std::ceil(static_cast<double>(n) * gamma))), _nelem(n),
+	      _num_thread(num_thread), _percent_elem_loaded_for_fastMode(perc_elem_loaded), _withprogress(progress)
 	{
 
 		if (n == 0)
@@ -423,10 +381,11 @@ public:
 			const double total_raw = _nb_levels;
 			const double sum_geom_read = 1.0 / (1.0 - _proba_collision);
 			const double total_writeEach = sum_geom_read + 1.0;
-			const double total_fastmode_ram = (_fastModeLevel + 1) +
-			                                  (std::pow(_proba_collision, _fastModeLevel)) * (_nb_levels - (_fastModeLevel + 1));
+			const double total_fastmode_ram = (_fastModeLevel + 1) + (std::pow(_proba_collision, _fastModeLevel)) *
+			                                                             (_nb_levels - (_fastModeLevel + 1));
 
-			std::printf("for info, total work write each  : %.3f    total work inram from level %i : %.3f  total work raw : %.3f \n",
+			std::printf("for info, total work write each  : %.3f    total work inram from level %i : %.3f  total work "
+			            "raw : %.3f \n",
 			            total_writeEach, _fastModeLevel, total_fastmode_ram, total_raw);
 
 			if (writeEach)
@@ -660,9 +619,9 @@ public:
 		}
 
 		// Recompute level parameters
-		_proba_collision = 1.0 - std::pow(((_gamma * static_cast<double>(_nelem) - 1) /
-		                                   (_gamma * static_cast<double>(_nelem))),
-		                                  _nelem - 1);
+		_proba_collision =
+		    1.0 -
+		    std::pow(((_gamma * static_cast<double>(_nelem) - 1) / (_gamma * static_cast<double>(_nelem))), _nelem - 1);
 		uint64_t previous_idx = 0;
 		_hash_domain = static_cast<uint64_t>(std::ceil(static_cast<double>(_nelem) * _gamma));
 
@@ -705,7 +664,8 @@ private:
 
 		if (_fastmode)
 		{
-			setLevelFastmode.resize(static_cast<size_t>(_percent_elem_loaded_for_fastMode * static_cast<double>(_nelem)));
+			setLevelFastmode.resize(
+			    static_cast<size_t>(_percent_elem_loaded_for_fastMode * static_cast<double>(_nelem)));
 		}
 
 		bufferperThread.resize(_num_thread);
@@ -717,9 +677,9 @@ private:
 			}
 		}
 
-		_proba_collision = 1.0 - std::pow(((_gamma * static_cast<double>(_nelem) - 1) /
-		                                   (_gamma * static_cast<double>(_nelem))),
-		                                  _nelem - 1);
+		_proba_collision =
+		    1.0 -
+		    std::pow(((_gamma * static_cast<double>(_nelem) - 1) / (_gamma * static_cast<double>(_nelem))), _nelem - 1);
 
 		_nb_levels = 25;
 		_levels.resize(_nb_levels);
@@ -752,8 +712,8 @@ private:
 	}
 
 	/// Compute level for element and return hash of last level reached
-	[[nodiscard]] uint64_t getLevel(hash_pair_t& bbhash, const elem_t& val, int* res_level,
-	                                int maxlevel = 100, int minlevel = 0) const
+	[[nodiscard]] uint64_t getLevel(hash_pair_t& bbhash, const elem_t& val, int* res_level, int maxlevel = 100,
+	                                int minlevel = 0) const
 	{
 		int level = 0;
 		uint64_t hash_raw = 0;
@@ -795,8 +755,7 @@ private:
 	}
 
 	/// Process elements at level i
-	template <typename Range>
-	void processLevel(const Range& input_range, int i)
+	template <typename Range> void processLevel(const Range& input_range, int i)
 	{
 		_levels[i].bitset = bitVector(_levels[i].hash_domain);
 
@@ -838,17 +797,21 @@ private:
 			auto data_iterator_level = file_binary<elem_t>(fname_prev);
 			using disklevel_it_type = decltype(data_iterator_level.begin());
 
-			t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
-			t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
+			t_arg.it_p =
+			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
+			t_arg.until_p =
+			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
 
 			for (uint32_t ii = 0; ii < _num_thread; ++ii)
 			{
 				// Create independent copy for each thread
 				auto* my_arg = new thread_args<Range, it_type>(t_arg);
-				tab_threads.emplace_back([my_arg]()
-				                         {
-                    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-                    delete my_arg; });
+				tab_threads.emplace_back(
+				    [my_arg]()
+				    {
+					    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+					    delete my_arg;
+				    });
 			}
 
 			// Must join here before file_binary is destroyed
@@ -862,16 +825,20 @@ private:
 			if (_fastmode && i >= (_fastModeLevel + 1))
 			{
 				using fastmode_it_type = decltype(setLevelFastmode.begin());
-				t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
-				t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
+				t_arg.it_p =
+				    std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
+				t_arg.until_p =
+				    std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
 
 				for (uint32_t ii = 0; ii < _num_thread; ++ii)
 				{
 					auto* my_arg = new thread_args<Range, it_type>(t_arg);
-					tab_threads.emplace_back([my_arg]()
-					                         {
-                        thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-                        delete my_arg; });
+					tab_threads.emplace_back(
+					    [my_arg]()
+					    {
+						    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+						    delete my_arg;
+					    });
 				}
 			}
 			else
@@ -879,10 +846,12 @@ private:
 				for (uint32_t ii = 0; ii < _num_thread; ++ii)
 				{
 					auto* my_arg = new thread_args<Range, it_type>(t_arg);
-					tab_threads.emplace_back([my_arg]()
-					                         {
-                        thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-                        delete my_arg; });
+					tab_threads.emplace_back(
+					    [my_arg]()
+					    {
+						    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
+						    delete my_arg;
+					    });
 				}
 			}
 
