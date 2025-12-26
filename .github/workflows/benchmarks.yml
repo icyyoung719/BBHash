@@ -1,0 +1,37 @@
+﻿name: Benchmarks
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-run-benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git
+
+      - name: Configure (with benchmarks)
+        run: cmake -S . -B build -DBUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Run benchmarks
+        run: |
+          set -e
+          BIN=""
+          if [ -x build/bench_bitvector ]; then BIN=build/bench_bitvector; fi
+          if [ -x build/benchmarks/bench_bitvector ]; then BIN=build/benchmarks/bench_bitvector; fi
+          if [ -z "$BIN" ]; then
+            echo "Benchmark binary not found. Listing build/" && ls -R build || true
+            exit 1
+          fi
+          echo "Running $BIN"
+          $BIN --benchmark_repetitions=2 --benchmark_min_time=0.1

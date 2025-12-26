@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.11)
 project(BBHash)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -85,6 +85,22 @@ add_test(NAME test_serialization COMMAND test_serialization)
 add_test(NAME test_endian COMMAND test_endian)
 add_test(NAME test_min COMMAND test_min)
 add_test(NAME test_multi_thread COMMAND test_multi_thread)
+
+option(BUILD_BENCHMARKS "Build benchmarks" OFF)
+
+if(BUILD_BENCHMARKS)
+  include(FetchContent)
+  # Disable benchmark's own tests to avoid requiring GoogleTest sources
+  set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    benchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.7.1
+  )
+  FetchContent_MakeAvailable(benchmark)
+
+  add_subdirectory(benchmarks)
+endif()
 
 # Note: bootest.cpp has compilation issues and will be fixed in a future update
 # It would be built with:
