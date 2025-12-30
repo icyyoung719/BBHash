@@ -12,9 +12,12 @@ namespace boomphf
 /// Runtime endianness check
 [[nodiscard]] inline bool is_system_little_endian() noexcept
 {
-	constexpr uint32_t test = 0x01020304;
-	const auto* bytes = reinterpret_cast<const uint8_t*>(&test);
-	return bytes[0] == 0x04;
+	static const bool little_endian = []() {
+		constexpr uint32_t test = 0x01020304;
+		const auto* bytes = reinterpret_cast<const uint8_t*>(&test);
+		return bytes[0] == 0x04;
+	}();
+	return little_endian;
 }
 
 /// Byte swap functions for different integer sizes
