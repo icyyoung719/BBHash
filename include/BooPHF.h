@@ -803,6 +803,7 @@ private:
 		t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<it_type>(input_range.end()));
 		t_arg.level = i;
 
+		// Prepare iterator sources for this level
 		if (_writeEachLevel && (i > 1))
 		{
 			auto data_iterator_level = file_binary<elem_t>(fname_prev);
@@ -812,65 +813,45 @@ private:
 			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
 			t_arg.until_p =
 			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
-
-			for (uint32_t ii = 0; ii < _num_thread; ++ii)
-			{
-				// Create independent copy for each thread
-				auto* my_arg = new thread_args<Range, it_type>(t_arg);
-				tab_threads.emplace_back(
-				    [my_arg]()
-				    {
-					    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-					    delete my_arg;
-				    });
-			}
-
-			// Must join here before file_binary is destroyed
-			for (auto& t : tab_threads)
-			{
-				t.join();
-			}
+			// data_iterator_level must stay alive until workers are joined below (it is in scope)
 		}
-		else
+		else if (_fastmode && i >= (_fastModeLevel + 1))
 		{
-			if (_fastmode && i >= (_fastModeLevel + 1))
-			{
-				using fastmode_it_type = decltype(setLevelFastmode.begin());
-				t_arg.it_p =
-				    std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
-				t_arg.until_p =
-				    std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
+			using fastmode_it_type = decltype(setLevelFastmode.begin());
+			t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
+			t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
+		}
 
+		// Unified worker launcher: spawn threads when _num_thread>1, otherwise run inline
+		auto launch_workers = [&](const thread_args<Range, it_type>& arg_to_copy)
+		{
+			if (_num_thread > 1)
+			{
 				for (uint32_t ii = 0; ii < _num_thread; ++ii)
 				{
-					auto* my_arg = new thread_args<Range, it_type>(t_arg);
+					auto* my_arg = new thread_args<Range, it_type>(arg_to_copy);
 					tab_threads.emplace_back(
 					    [my_arg]()
 					    {
 						    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
 						    delete my_arg;
 					    });
+				}
+
+				for (auto& t : tab_threads)
+				{
+					t.join();
 				}
 			}
 			else
 			{
-				for (uint32_t ii = 0; ii < _num_thread; ++ii)
-				{
-					auto* my_arg = new thread_args<Range, it_type>(t_arg);
-					tab_threads.emplace_back(
-					    [my_arg]()
-					    {
-						    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-						    delete my_arg;
-					    });
-				}
+				thread_args<Range, it_type> my_arg(arg_to_copy);
+				thread_processLevel<elem_t, Hasher_t, Range, it_type>(&my_arg);
 			}
+		};
 
-			for (auto& t : tab_threads)
-			{
-				t.join();
-			}
-		}
+		// Launch workers for the configured iterator
+		launch_workers(t_arg); // multi-thread tasks don't use t_arg directly, they get their own copy
 
 		if (_fastmode && i == _fastModeLevel)
 		{
