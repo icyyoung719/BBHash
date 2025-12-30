@@ -134,48 +134,48 @@ jobs:
         cd build
         ./main
 
-  coverage-linux:
+  coverage:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install lcov
-      run: sudo apt-get update && sudo apt-get install -y lcov
+      - name: Install lcov
+        run: sudo apt-get update && sudo apt-get install -y lcov
 
-    - name: Configure CMake (coverage)
-      run: |
-        mkdir -p build
-        cd build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_C_COMPILER=gcc \
-          -DCMAKE_CXX_COMPILER=g++ \
-          -DCMAKE_C_FLAGS="--coverage -O0 -g" \
-          -DCMAKE_CXX_FLAGS="--coverage -O0 -g" \
-          -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+      - name: Configure CMake (coverage)
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_FLAGS="--coverage -O0 -g -fprofile-update=atomic" \
+            -DCMAKE_CXX_FLAGS="--coverage -O0 -g -fprofile-update=atomic" \
+            -DCMAKE_EXE_LINKER_FLAGS="--coverage"
 
-    - name: Build
-      run: |
-        cd build
-        cmake --build . -j$(nproc)
+      - name: Build
+        run: cd build && cmake --build . -j$(nproc)
 
-    - name: Run tests
-      run: |
-        cd build
-        ctest --output-on-failure
+      - name: Run tests
+        run: cd build && ctest --output-on-failure
 
-    - name: Capture coverage
-      run: |
-        cd build
-        lcov --capture --directory . --output-file coverage.info
-        lcov --remove coverage.info '/usr/*' '*/catch2/*' '*/tests/*' --output-file coverage.info
+      - name: Capture coverage
+        run: |
+          cd build
+          lcov --rc geninfo_unexecuted_blocks=1 \
+            --capture \
+            --directory . \
+            --output-file coverage.info \
+            --include "$(pwd)/include/*"
+          lcov --remove coverage.info '/usr/*' '*/catch2/*' '*/tests/*' --output-file coverage.info
 
-    - name: Generate HTML report
-      run: genhtml build/coverage.info --output-directory build/coverage_html
+      - name: Generate HTML report
+        run: genhtml build/coverage.info --output-directory build/coverage_html
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: build/coverage_html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage_html
 
