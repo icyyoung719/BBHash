@@ -167,8 +167,7 @@ jobs:
           lcov --rc geninfo_unexecuted_blocks=1 \
             --capture \
             --directory . \
-            --output-file coverage.info \
-            --include "$(pwd)/include/*"
+            --output-file coverage.info
           lcov --remove coverage.info '/usr/*' '*/catch2/*' '*/tests/*' --output-file coverage.info
 
       - name: Generate HTML report
