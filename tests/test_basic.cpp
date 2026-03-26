@@ -127,3 +127,23 @@ TEST_CASE("MPHF with different data sizes", "[sizes]")
 		}
 	}
 }
+
+TEST_CASE("MPHF with writeEachLevel enabled", "[writeEachLevel]")
+{
+	// Need a dataset larger than NBBUFF (10000) to trigger buffer flush
+	std::vector<uint64_t> data;
+	for (uint64_t i = 0; i < 25000; i++)
+	{
+		data.push_back(i * 3);
+	}
+
+	SECTION("Build with writeEachLevel = true")
+	{
+		boophf_t bphf(data.size(), data, 1, 2.0, true, false);
+		for (const auto& key : data)
+		{
+			uint64_t idx = bphf.lookup(key);
+			REQUIRE(idx < data.size());
+		}
+	}
+}

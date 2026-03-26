@@ -61,9 +61,8 @@ TEST_CASE("Multi-thread builds equal across thread counts (binary + lookup)", "[
 
 	for (auto c : counts_set)
 	{
-		// Build
-		auto phf = std::make_unique<boophf_t>(data.size(), data, static_cast<int>(c), 1.0, false, false);
-
+		// Build with writeEachLevel = true to test disk I/O thread-safety
+		auto phf = std::make_unique<boophf_t>(data.size(), data, static_cast<int>(c), 1.0, true, false);
 		// Save to file
 		std::ostringstream fname;
 		fname << "test_threads_" << c << ".mphf";

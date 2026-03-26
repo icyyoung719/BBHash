@@ -53,6 +53,23 @@ public:
 		std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
 	}
 
+	bfile_iterator& operator=(const bfile_iterator& cr)
+	{
+		if (this != &cr)
+		{
+			_is = cr._is;
+			_pos = cr._pos;
+			_buffsize = cr._buffsize;
+			_inbuff = cr._inbuff;
+			_cptread = cr._cptread;
+			_elem = cr._elem;
+			std::free(_buffer);
+			_buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
+			std::memcpy(_buffer, cr._buffer, _buffsize * sizeof(basetype));
+		}
+		return *this;
+	}
+
 	explicit bfile_iterator(FILE* is) : _is(is), _pos(0), _inbuff(0), _cptread(0), _buffsize(10000)
 	{
 		_buffer = static_cast<basetype*>(std::malloc(_buffsize * sizeof(basetype)));
@@ -118,6 +135,21 @@ private:
 template <typename type_elem> class file_binary
 {
 public:
+	file_binary(const file_binary&) = delete;
+	file_binary& operator=(const file_binary&) = delete;
+
+	file_binary(file_binary&& other) noexcept : _is(other._is) { other._is = nullptr; }
+	file_binary& operator=(file_binary&& other) noexcept
+	{
+		if (this != &other)
+		{
+			if (_is) std::fclose(_is);
+			_is = other._is;
+			other._is = nullptr;
+		}
+		return *this;
+	}
+
 	explicit file_binary(const char* filename)
 	{
 		_is = std::fopen(filename, "rb");
@@ -129,7 +161,7 @@ public:
 
 	explicit file_binary(const std::string& filename) : file_binary(filename.c_str()) {}
 
-	~file_binary() { std::fclose(_is); }
+	~file_binary() { if (_is) std::fclose(_is); }
 
 	[[nodiscard]] bfile_iterator<type_elem> begin() const { return bfile_iterator<type_elem>(_is); }
 
@@ -551,9 +583,11 @@ public:
 					{
 						if (_writeEachLevel && i > 0 && i < static_cast<int>(_nb_levels) - 1)
 						{
+							myWriteBuff[writebuff++] = val;
 							if (writebuff >= NBBUFF)
 							{
 								write_with_file_lock(_currlevelFile, myWriteBuff, writebuff);
+								writebuff = 0;
 							}
 						}
 
@@ -783,7 +817,7 @@ private:
 
 			if (i < static_cast<int>(_nb_levels) - 1 && i > 0)
 			{
-				_currlevelFile = std::fopen(fname_curr.c_str(), "w");
+				_currlevelFile = std::fopen(fname_curr.c_str(), "wb");
 			}
 		}
 
@@ -804,37 +838,19 @@ private:
 		t_arg.level = i;
 
 		// Prepare iterator sources for this level
-		if (_writeEachLevel && (i > 1))
-		{
-			auto data_iterator_level = file_binary<elem_t>(fname_prev);
-			using disklevel_it_type = decltype(data_iterator_level.begin());
-
-			t_arg.it_p =
-			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.begin()));
-			t_arg.until_p =
-			    std::static_pointer_cast<void>(std::make_shared<disklevel_it_type>(data_iterator_level.end()));
-			// data_iterator_level must stay alive until workers are joined below (it is in scope)
-		}
-		else if (_fastmode && i >= (_fastModeLevel + 1))
-		{
-			using fastmode_it_type = decltype(setLevelFastmode.begin());
-			t_arg.it_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.begin()));
-			t_arg.until_p = std::static_pointer_cast<void>(std::make_shared<fastmode_it_type>(setLevelFastmode.end()));
-		}
-
-		// Unified worker launcher: spawn threads when _num_thread>1, otherwise run inline
-		auto launch_workers = [&](const thread_args<Range, it_type>& arg_to_copy)
+		std::unique_ptr<file_binary<elem_t>> data_iterator_level_ptr;
+		
+		auto launch_workers = [&](auto start_it, auto until_it)
 		{
 			if (_num_thread > 1)
 			{
 				for (uint32_t ii = 0; ii < _num_thread; ++ii)
 				{
-					auto* my_arg = new thread_args<Range, it_type>(arg_to_copy);
 					tab_threads.emplace_back(
-					    [my_arg]()
+					    [this, start_it, until_it, i]()
 					    {
-						    thread_processLevel<elem_t, Hasher_t, Range, it_type>(my_arg);
-						    delete my_arg;
+						    std::vector<elem_t> buffer(NBBUFF);
+						    this->pthread_processLevel(buffer, start_it, until_it, i);
 					    });
 				}
 
@@ -845,13 +861,33 @@ private:
 			}
 			else
 			{
-				thread_args<Range, it_type> my_arg(arg_to_copy);
-				thread_processLevel<elem_t, Hasher_t, Range, it_type>(&my_arg);
+				std::vector<elem_t> buffer(NBBUFF);
+				this->pthread_processLevel(buffer, start_it, until_it, i);
 			}
 		};
 
-		// Launch workers for the configured iterator
-		launch_workers(t_arg); // multi-thread tasks don't use t_arg directly, they get their own copy
+		if (_writeEachLevel && (i > 1))
+		{
+			data_iterator_level_ptr = std::make_unique<file_binary<elem_t>>(fname_prev);
+			using disklevel_it_type = decltype(data_iterator_level_ptr->begin());
+
+			auto start_it = std::make_shared<disklevel_it_type>(data_iterator_level_ptr->begin());
+			auto until_it = std::make_shared<disklevel_it_type>(data_iterator_level_ptr->end());
+			launch_workers(start_it, until_it);
+		}
+		else if (_fastmode && i >= (_fastModeLevel + 1))
+		{
+			using fastmode_it_type = decltype(setLevelFastmode.begin());
+			auto start_it = std::make_shared<fastmode_it_type>(setLevelFastmode.begin());
+			auto until_it = std::make_shared<fastmode_it_type>(setLevelFastmode.end());
+			launch_workers(start_it, until_it);
+		}
+		else
+		{
+			auto start_it = std::make_shared<it_type>(input_range.begin());
+			auto until_it = std::make_shared<it_type>(input_range.end());
+			launch_workers(start_it, until_it);
+		}
 
 		if (_fastmode && i == _fastModeLevel)
 		{
@@ -913,34 +949,5 @@ private:
 public:
 	std::mutex _mutex;
 };
-
-////////////////////////////////////////////////////////////////
-// Threading
-////////////////////////////////////////////////////////////////
-
-template <typename elem_t, typename Hasher_t, typename Range, typename it_type>
-void thread_processLevel(thread_args<Range, it_type>* targ)
-{
-	if (targ == nullptr)
-	{
-		return;
-	}
-
-	auto* obw = static_cast<mphf<elem_t, Hasher_t>*>(targ->boophf);
-	const int level = targ->level;
-
-	std::vector<elem_t> buffer(NBBUFF);
-
-	std::shared_ptr<it_type> startit;
-	std::shared_ptr<it_type> until_p;
-
-	{
-		std::lock_guard<std::mutex> lock(obw->_mutex);
-		startit = std::static_pointer_cast<it_type>(targ->it_p);
-		until_p = std::static_pointer_cast<it_type>(targ->until_p);
-	}
-
-	obw->pthread_processLevel(buffer, startit, until_p, level);
-}
 
 } // namespace boomphf
